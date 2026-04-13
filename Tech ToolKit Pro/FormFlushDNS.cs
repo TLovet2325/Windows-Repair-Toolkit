@@ -104,7 +104,7 @@ namespace Tech_ToolKit_Pro
             tools = new List<NetTool>
             {
                 new NetTool {
-                    Title       = "Flush DNS Cache",
+                    Title       = "    Flush DNS Cache",
                     Subtitle    = "ipconfig /flushdns",
                     Icon        = "🌐",
                     Desc        = "Clears the DNS resolver cache. Fixes issues where websites " +
@@ -120,7 +120,7 @@ namespace Tech_ToolKit_Pro
                     OkKeywords  = new[] { "successfully flushed", "successfully" }
                 },
                 new NetTool {
-                    Title       = "Reset WinSock",
+                    Title       = "   Reset WinSock",
                     Subtitle    = "netsh winsock reset",
                     Icon        = "🔌",
                     Desc        = "Resets the Windows Sockets API to default settings. " +
@@ -137,7 +137,7 @@ namespace Tech_ToolKit_Pro
                     OkKeywords  = new[] { "successfully reset", "winsock reset completed", "successfully" }
                 },
                 new NetTool {
-                    Title       = "Reset TCP/IP Stack",
+                    Title       = "    Reset TCP/IP Stack",
                     Subtitle    = "netsh int ip reset",
                     Icon        = "📡",
                     Desc        = "Resets the TCP/IP protocol stack to default. " +
