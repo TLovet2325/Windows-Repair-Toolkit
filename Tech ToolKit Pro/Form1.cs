@@ -2,12 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics.Eventing.Reader;
 using System.Drawing;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using WindowsBackupUtility;
+using System.IO.Compression;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
+
 
 namespace Tech_ToolKit_Pro
 {
@@ -129,14 +133,14 @@ namespace Tech_ToolKit_Pro
         private void Form1_Load(object sender, EventArgs e)
         {
             // Enable double buffering on contentPanel to reduce flickering during UI updates/transitions
-            typeof(Panel).InvokeMember("DoubleBuffered", 
-                System.Reflection.BindingFlags.SetProperty | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, 
+            typeof(Panel).InvokeMember("DoubleBuffered",
+                System.Reflection.BindingFlags.SetProperty | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
                 null, contentPanel, new object[] { true });
 
             LoadForm(new FormDashboard()); // Dashboard always shows first
 
         }
-        
+
         // ── Content buttons — one line each ──────────────────────────
         private void button1_Click(object sender, EventArgs e) => LoadForm(new FormDashboard());
         private void button2_Click(object sender, EventArgs e) => LoadForm(new FormPointofRestoration());
@@ -164,13 +168,13 @@ namespace Tech_ToolKit_Pro
 
         private void button11_Click(object sender, EventArgs e)
         {
-            if (WindowState == FormWindowState.Normal) 
+            if (WindowState == FormWindowState.Normal)
             {
                 WindowState = FormWindowState.Maximized;
             }
-            else 
-            {   
-                WindowState = FormWindowState.Normal; 
+            else
+            {
+                WindowState = FormWindowState.Normal;
             }
 
         }
@@ -179,9 +183,24 @@ namespace Tech_ToolKit_Pro
         {
             Application.Exit();
         }
+        public const int WM_INCLBUTTONDOWN = 0xA1;
+        public const int HTCAPTION = 0x2;
+        [DllImport("User32.dll")]
+        public static extern bool ReleaseCapture();
+        [DllImport("User32.dll")]
+        public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int IParam);
+        private void panel1_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                ReleaseCapture();
+                SendMessage(Handle, WM_INCLBUTTONDOWN, HTCAPTION, 0);
+            }
+        }
     }
 }
-    
+
+
 
 
 
