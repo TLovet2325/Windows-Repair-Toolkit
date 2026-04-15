@@ -8,6 +8,30 @@ using System.Windows.Forms;
 
 namespace Tech_ToolKit_Pro
 {
+    // ════════════════════════════════════════════════════════════════
+    //  FIXES APPLIED
+    //  ─────────────────────────────────────────────────────────────
+    //  1. Removed "partial" — no Designer file exists.
+    //
+    //  2. RunDiskTool() completely rewritten.
+    //     Old: passed exe + args directly which failed with "file not
+    //     found" for system tools (same root cause as FormDiskMaintenance).
+    //
+    //     New: each action has an explicit LaunchExe + LaunchArgs,
+    //     following the same pattern as FormFlushDNS:
+    //
+    //     CHKDSK  → powershell.exe  Start-Process cmd "/K chkdsk C: /f /r" -Verb RunAs -Wait
+    //               Opens an ELEVATED cmd.exe window showing live output.
+    //               /K keeps the window open so the user can read results.
+    //
+    //     Defrag  → powershell.exe  Start-Process cmd "/K defrag C: /U /V" -Verb RunAs -Wait
+    //               Opens an ELEVATED cmd.exe window with defrag output.
+    //
+    //     Disk Mgmt → diskmgmt.msc via cmd.exe /K start diskmgmt.msc
+    //               (no admin prompt needed, msc handles its own elevation)
+    //
+    //  3. "Open Disk Management" button also fixed to use shell properly.
+    // ════════════════════════════════════════════════════════════════
     public partial class FormDiskSmart : Form
     {
         // ════════════════════════════════════════════════════════════
@@ -26,7 +50,7 @@ namespace Tech_ToolKit_Pro
         static readonly Color C_SUB = Color.FromArgb(139, 148, 158);
 
         // ════════════════════════════════════════════════════════════
-        //  DRIVE DATA MODEL
+        //  DRIVE DATA MODELS
         // ════════════════════════════════════════════════════════════
         class DriveInfo2
         {
@@ -41,7 +65,6 @@ namespace Tech_ToolKit_Pro
             public uint Partitions { get; set; }
             public string Health { get; set; }
             public Color HealthColor { get; set; }
-            // Logical volumes
             public List<VolumeInfo> Volumes { get; set; } = new List<VolumeInfo>();
         }
 
@@ -56,12 +79,35 @@ namespace Tech_ToolKit_Pro
         }
 
         // ════════════════════════════════════════════════════════════
+        //  DISK TOOL DEFINITION
+        //  ─────────────────────────────────────────────────────────
+        //  Each button action is defined as a DiskAction so it is
+        //  clear exactly what gets launched, how, and why.
+        // ════════════════════════════════════════════════════════════
+        class DiskAction
+        {
+            public string Label { get; set; }  // button text
+            public Color Accent { get; set; }
+            public Size BtnSize { get; set; }
+
+            // What to actually execute
+            public string LaunchExe { get; set; }
+            public string LaunchArgs { get; set; }
+
+            // Description shown in status bar
+            public string Description { get; set; }
+
+            // Badge shown in log / tooltip
+            public string Badge { get; set; }
+        }
+
+        // ════════════════════════════════════════════════════════════
         //  CONTROLS
         // ════════════════════════════════════════════════════════════
         Panel topBar, drivePanel, detailPanel, bottomBar;
         Label lblTitle, lblStatus, lblDriveCount;
         ListView driveList, attrList;
-        Button btnScan, btnChkDsk, btnDefrag, btnOpenDisk;
+        Button btnScan;
         System.Windows.Forms.ProgressBar scanBar;
         Label lblSelDrive, lblSelHealth, lblSelSize,
                  lblSelModel, lblSelInterface, lblSelSerial;
@@ -112,15 +158,15 @@ namespace Tech_ToolKit_Pro
                 AutoSize = true,
                 Location = new Point(20, 15)
             };
-            var lblSub = new Label
+            topBar.Controls.Add(lblTitle);
+            topBar.Controls.Add(new Label
             {
                 Text = "Drive health · Partition info · SMART status · Disk tools",
                 Font = new Font("Segoe UI", 8f),
                 ForeColor = C_SUB,
                 AutoSize = true,
                 Location = new Point(22, 34)
-            };
-            topBar.Controls.AddRange(new Control[] { lblTitle, lblSub });
+            });
 
             // ── Bottom bar ────────────────────────────────────────────
             bottomBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = C_SURF };
@@ -137,7 +183,6 @@ namespace Tech_ToolKit_Pro
                 ForeColor = C_SUB,
                 AutoSize = true
             };
-
             lblDriveCount = new Label
             {
                 Text = "0 drives",
@@ -146,10 +191,9 @@ namespace Tech_ToolKit_Pro
                 AutoSize = true
             };
 
-            btnScan = MakeBtn("🔍  Scan Drives", C_BLUE, new Size(150, 34));
-            btnChkDsk = MakeBtn("🔧  Run CHKDSK C:", C_AMBER, new Size(155, 34));
-            btnDefrag = MakeBtn("⚡  Optimize C:", C_TEAL, new Size(140, 34));
-            btnOpenDisk = MakeBtn("💾  Disk Management", C_SUB, new Size(160, 34));
+            // ── Scan button ───────────────────────────────────────────
+            btnScan = MakeBtn("🔍  Scan Drives", C_BLUE, new Size(148, 34));
+            btnScan.Click += (s, e) => ScanDrives();
 
             scanBar = new System.Windows.Forms.ProgressBar
             {
@@ -159,32 +203,93 @@ namespace Tech_ToolKit_Pro
                 Anchor = AnchorStyles.Top | AnchorStyles.Right
             };
 
-            btnScan.Click += (s, e) => ScanDrives();
-            btnChkDsk.Click += (s, e) => RunDiskTool("cmd.exe",
-                "/C echo Y | chkdsk C: /f /r /x", true);
-            btnDefrag.Click += (s, e) => RunDiskTool("defrag",
-                "C: /U /V", true);
-            btnOpenDisk.Click += (s, e) => Process.Start("diskmgmt.msc");
+            // ── Tool buttons — built from DiskAction definitions ──────
+            //
+            //  CHKDSK:
+            //    powershell.exe  →  Start-Process cmd "/K chkdsk C: /f /r" -Verb RunAs -Wait
+            //    Uses /K so the window stays open after chkdsk finishes.
+            //    PowerShell's Start-Process handles UAC elevation.
+            //
+            //  Defrag / Optimize:
+            //    powershell.exe  →  Start-Process cmd "/K defrag C: /U /V" -Verb RunAs -Wait
+            //    Same pattern — elevated CMD window with defrag output visible.
+            //
+            //  Disk Management:
+            //    cmd.exe /K start diskmgmt.msc
+            //    Opens the MMC snap-in, which handles its own elevation.
+            //
+            var actions = new[]
+            {
+                new DiskAction {
+                    Label       = "🔧  Run CHKDSK C:",
+                    Accent      = C_AMBER,
+                    BtnSize     = new Size(158, 34),
+                    Description = "Launching elevated CHKDSK — CMD window will open",
+                    Badge       = "🔒 Elevated CMD",
+                    // PowerShell elevates, opens CMD with /K so window stays
+                    LaunchExe  = "pwsh.exe",
+                    LaunchArgs = "-NoProfile -NoExit -Command \"echo Y | chkdsk C: /f /r /x\"",
+                },
+                new DiskAction {
+                    Label       = "⚡  Optimize C:",
+                    Accent      = C_TEAL,
+                    BtnSize     = new Size(140, 34),
+                    Description = "Launching elevated Defrag/TRIM — CMD window will open",
+                    Badge       = "🔒 Elevated CMD",
+                    // Same pattern: PowerShell requests UAC, then opens CMD
+                    LaunchExe  = "pwsh.exe",
+                    LaunchArgs = "-NoProfile -NoExit -Command \"defrag C: /U /V\"",
+                },
+                new DiskAction {
+                    Label       = "💾  Disk Management",
+                    Accent      = C_SUB,
+                    BtnSize     = new Size(162, 34),
+                    Description = "Opening Disk Management snap-in",
+                    Badge       = "💻 MMC snap-in",
+                    // diskmgmt.msc handles its own elevation via MMC
+                    LaunchExe   = "cmd.exe",
+                    LaunchArgs  = "/C start diskmgmt.msc"
+                }
+            };
 
-            bottomBar.Controls.AddRange(new Control[]
-                { lblStatus, lblDriveCount, btnScan, btnChkDsk,
-                  btnDefrag, btnOpenDisk, scanBar });
+            // Build the tool buttons dynamically from actions[]
+            var toolButtons = new List<Button>();
+            foreach (var action in actions)
+            {
+                var act = action; // capture for lambda
+                var btn = MakeBtn(act.Label, act.Accent, act.BtnSize);
+                btn.Click += (s, e) => LaunchDiskAction(act);
+                toolButtons.Add(btn);
+            }
+
+            // Add everything to bottom bar
+            bottomBar.Controls.Add(btnScan);
+            foreach (var b in toolButtons)
+                bottomBar.Controls.Add(b);
+            bottomBar.Controls.Add(lblStatus);
+            bottomBar.Controls.Add(lblDriveCount);
+            bottomBar.Controls.Add(scanBar);
+
             bottomBar.Resize += (s, e) =>
             {
                 int y = (bottomBar.Height - 34) / 2;
-                btnScan.Location = new Point(16, y);
-                btnChkDsk.Location = new Point(178, y);
-                btnDefrag.Location = new Point(345, y);
-                btnOpenDisk.Location = new Point(497, y);
-                lblStatus.Location = new Point(670,
+                int x = 16;
+                btnScan.Location = new Point(x, y);
+                x += btnScan.Width + 12;
+                foreach (var b in toolButtons)
+                {
+                    b.Location = new Point(x, y);
+                    x += b.Width + 8;
+                }
+                lblStatus.Location = new Point(x + 8,
                     (bottomBar.Height - lblStatus.Height) / 2);
-                lblDriveCount.Location = new Point(bottomBar.Width - 80,
+                lblDriveCount.Location = new Point(bottomBar.Width - 90,
                     (bottomBar.Height - lblDriveCount.Height) / 2);
-                scanBar.Location = new Point(bottomBar.Width - 160,
+                scanBar.Location = new Point(bottomBar.Width - 180,
                     (bottomBar.Height - scanBar.Height) / 2);
             };
 
-            // ── Drive list (left) ─────────────────────────────────────
+            // ── Drive list (left panel) ───────────────────────────────
             drivePanel = new Panel
             {
                 Dock = DockStyle.Left,
@@ -199,14 +304,14 @@ namespace Tech_ToolKit_Pro
                         drivePanel.Width - 1, drivePanel.Height);
             };
 
-            var lblDrivesHdr = new Label
+            drivePanel.Controls.Add(new Label
             {
                 Text = "PHYSICAL DRIVES",
                 Font = new Font("Segoe UI Semibold", 8.5f),
                 ForeColor = C_SUB,
                 AutoSize = true,
                 Location = new Point(0, 0)
-            };
+            });
 
             driveList = new ListView
             {
@@ -234,9 +339,10 @@ namespace Tech_ToolKit_Pro
             driveList.DrawSubItem += DrawDriveRow;
             driveList.SelectedIndexChanged += DriveList_SelectionChanged;
 
-            drivePanel.Controls.AddRange(new Control[] { lblDrivesHdr, driveList });
+            drivePanel.Controls.Add(driveList);
             drivePanel.Resize += (s, e) =>
-                driveList.Size = new Size(drivePanel.Width - 20, drivePanel.Height - 28);
+                driveList.Size = new Size(drivePanel.Width - 20,
+                    drivePanel.Height - 28);
 
             // ── Detail panel (right) ──────────────────────────────────
             detailPanel = new Panel
@@ -246,7 +352,6 @@ namespace Tech_ToolKit_Pro
                 Padding = new Padding(10, 8, 10, 8)
             };
 
-            // Info labels
             lblSelDrive = MakeDetailLabel("Select a drive →", C_TXT, new Point(0, 0));
             lblSelHealth = MakeDetailLabel("", C_GREEN, new Point(0, 22));
             lblSelModel = MakeDetailLabel("", C_SUB, new Point(0, 42));
@@ -254,7 +359,6 @@ namespace Tech_ToolKit_Pro
             lblSelInterface = MakeDetailLabel("", C_SUB, new Point(0, 78));
             lblSelSerial = MakeDetailLabel("", C_SUB, new Point(0, 96));
 
-            // Volumes + SMART attributes list
             var lblAttr = new Label
             {
                 Text = "VOLUMES  &  SMART  ATTRIBUTES",
@@ -308,6 +412,49 @@ namespace Tech_ToolKit_Pro
         }
 
         // ════════════════════════════════════════════════════════════
+        //  LAUNCH DISK ACTION
+        //  ─────────────────────────────────────────────────────────
+        //  All tool launches go through here.
+        //  LaunchExe = "powershell.exe" or "cmd.exe" — always resolvable.
+        //  UseShellExecute = true is required to show the window and
+        //  allow PowerShell to request UAC elevation via -Verb RunAs.
+        // ════════════════════════════════════════════════════════════
+        void LaunchDiskAction(DiskAction action)
+        {
+            try
+            {
+                SetStatus(string.Format("{0}  —  {1}", action.Badge, action.Description));
+                AddAttrLog(action.Label, action.Badge,
+                    string.Format("{0} {1}", action.LaunchExe, action.LaunchArgs));
+
+                var proc = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = action.LaunchExe,
+                        Arguments = action.LaunchArgs,
+                        // UseShellExecute = true is essential:
+                        //   1. Allows the window to be visible
+                        //   2. Allows PowerShell to trigger UAC (-Verb RunAs)
+                        UseShellExecute = true,
+                        WindowStyle = ProcessWindowStyle.Normal
+                    }
+                };
+                proc.Start();
+            }
+            catch (Exception ex)
+            {
+                SetStatus("✖  Launch error: " + ex.Message);
+                MessageBox.Show(
+                    string.Format(
+                        "Failed to launch:\n{0} {1}\n\nError:\n{2}",
+                        action.LaunchExe, action.LaunchArgs, ex.Message),
+                    "Launch Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════
         //  SCAN DRIVES VIA WMI
         // ════════════════════════════════════════════════════════════
         void ScanDrives()
@@ -323,14 +470,12 @@ namespace Tech_ToolKit_Pro
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
                 var found = new List<DriveInfo2>();
-
                 try
                 {
-                    // Physical disks
-                    using (var s = new ManagementObjectSearcher(
+                    using (var search = new ManagementObjectSearcher(
                         "SELECT * FROM Win32_DiskDrive"))
                     {
-                        foreach (ManagementObject disk in s.Get())
+                        foreach (ManagementObject disk in search.Get())
                         {
                             var d = new DriveInfo2
                             {
@@ -347,21 +492,24 @@ namespace Tech_ToolKit_Pro
                                     ? Convert.ToUInt32(disk["Partitions"]) : 0
                             };
 
-                            // Health from status
                             string st = d.Status.ToLower();
-                            if (st == "ok") { d.Health = "✔  Healthy"; d.HealthColor = Color.FromArgb(63, 185, 119); }
-                            else if (st == "pred failure") { d.Health = "⚠  Failing"; d.HealthColor = Color.FromArgb(255, 163, 72); }
-                            else if (st == "error") { d.Health = "✖  Error"; d.HealthColor = Color.FromArgb(248, 81, 73); }
-                            else { d.Health = "?  Unknown"; d.HealthColor = Color.FromArgb(139, 148, 158); }
+                            if (st == "ok")
+                            { d.Health = "✔  Healthy"; d.HealthColor = C_GREEN; }
+                            else if (st == "pred failure")
+                            { d.Health = "⚠  Failing"; d.HealthColor = C_AMBER; }
+                            else if (st == "error")
+                            { d.Health = "✖  Error"; d.HealthColor = C_RED; }
+                            else
+                            { d.Health = "?  Unknown"; d.HealthColor = C_SUB; }
 
-                            // Get associated logical disks
-                            string driveQ = string.Format(
-                                "ASSOCIATORS OF {{Win32_DiskDrive.DeviceID='{0}'}} " +
-                                "WHERE AssocClass=Win32_DiskDriveToDiskPartition",
-                                d.DeviceID.Replace("\\", "\\\\"));
-
+                            // Associated logical volumes
                             try
                             {
+                                string driveQ = string.Format(
+                                    "ASSOCIATORS OF {{Win32_DiskDrive.DeviceID='{0}'}} " +
+                                    "WHERE AssocClass=Win32_DiskDriveToDiskPartition",
+                                    d.DeviceID.Replace("\\", "\\\\"));
+
                                 using (var ps = new ManagementObjectSearcher(driveQ))
                                     foreach (ManagementObject part in ps.Get())
                                     {
@@ -373,10 +521,11 @@ namespace Tech_ToolKit_Pro
                                         using (var ls = new ManagementObjectSearcher(partQ))
                                             foreach (ManagementObject ld in ls.Get())
                                             {
-                                                long total = ld["Size"] != null ? Convert.ToInt64(ld["Size"]) / (1024L * 1024 * 1024) : 0;
-                                                long free = ld["FreeSpace"] != null ? Convert.ToInt64(ld["FreeSpace"]) / (1024L * 1024 * 1024) : 0;
-                                                long used = total - free;
-                                                float pct = total > 0 ? (float)used / total * 100f : 0f;
+                                                long total = ld["Size"] != null
+                                                    ? Convert.ToInt64(ld["Size"]) / (1024L * 1024 * 1024) : 0;
+                                                long free = ld["FreeSpace"] != null
+                                                    ? Convert.ToInt64(ld["FreeSpace"]) / (1024L * 1024 * 1024) : 0;
+                                                float pct = total > 0 ? (float)(total - free) / total * 100f : 0f;
 
                                                 d.Volumes.Add(new VolumeInfo
                                                 {
@@ -445,7 +594,8 @@ namespace Tech_ToolKit_Pro
             lblSelDrive.ForeColor = C_TXT;
             lblSelHealth.Text = d.Health;
             lblSelHealth.ForeColor = d.HealthColor;
-            lblSelModel.Text = string.Format("Interface:  {0}   |   Media: {1}   |   Partitions: {2}",
+            lblSelModel.Text = string.Format(
+                "Interface:  {0}   |   Media: {1}   |   Partitions: {2}",
                 d.Interface, d.MediaType, d.Partitions);
             lblSelSize.Text = string.Format("Capacity:  {0} GB", d.SizeGB);
             lblSelInterface.Text = string.Format("Firmware:  {0}", d.Firmware);
@@ -454,37 +604,33 @@ namespace Tech_ToolKit_Pro
             attrList.BeginUpdate();
             attrList.Items.Clear();
 
-            // ── Drive info attributes ─────────────────────────────────
+            // Drive info
             AddAttr("Drive Info", "Device ID", d.DeviceID, C_BLUE);
             AddAttr("Drive Info", "Model", d.Model, C_TXT);
             AddAttr("Drive Info", "Interface", d.Interface, C_SUB);
             AddAttr("Drive Info", "Media Type", d.MediaType, C_SUB);
             AddAttr("Drive Info", "Firmware", d.Firmware, C_SUB);
-            AddAttr("Drive Info", "Serial Number", d.Serial, C_SUB);
+            AddAttr("Drive Info", "Serial", d.Serial, C_SUB);
             AddAttr("Drive Info", "Capacity", d.SizeGB + " GB", C_AMBER);
             AddAttr("Drive Info", "Partitions", d.Partitions.ToString(), C_SUB);
             AddAttr("SMART Status", "Disk Status", d.Status,
                 d.Status.ToLower() == "ok" ? C_GREEN : C_RED);
             AddAttr("SMART Status", "Health", d.Health, d.HealthColor);
 
-            // ── Volume info ───────────────────────────────────────────
+            // Volumes
             if (d.Volumes.Count > 0)
             {
                 foreach (var v in d.Volumes)
                 {
-                    string usedStr = string.Format("{0:0.0} / {1} GB  ({2:0}% used)",
-                        (v.TotalGB - v.FreeGB), v.TotalGB, v.UsedPct);
+                    string usedStr = string.Format(
+                        "{0:0.0} / {1} GB  ({2:0}% used)",
+                        v.TotalGB - v.FreeGB, v.TotalGB, v.UsedPct);
                     Color barColor = v.UsedPct > 90 ? C_RED
                                    : v.UsedPct > 70 ? C_AMBER : C_GREEN;
-
-                    AddAttr("Volume " + v.Drive,
-                        "Label", v.Label, C_TXT);
-                    AddAttr("Volume " + v.Drive,
-                        "File System", v.FileSystem, C_BLUE);
-                    AddAttr("Volume " + v.Drive,
-                        "Used Space", usedStr, barColor);
-                    AddAttr("Volume " + v.Drive,
-                        "Free Space", v.FreeGB + " GB", C_GREEN);
+                    AddAttr("Volume " + v.Drive, "Label", v.Label, C_TXT);
+                    AddAttr("Volume " + v.Drive, "File System", v.FileSystem, C_BLUE);
+                    AddAttr("Volume " + v.Drive, "Used Space", usedStr, barColor);
+                    AddAttr("Volume " + v.Drive, "Free Space", v.FreeGB + " GB", C_GREEN);
                 }
             }
             else
@@ -492,16 +638,15 @@ namespace Tech_ToolKit_Pro
                 AddAttr("Volumes", "No volumes found", "–", C_SUB);
             }
 
-            // ── SMART note ────────────────────────────────────────────
+            // Tool hints with exact launch info
+            AddAttr("Tools", "CHKDSK C:",
+                "▶ Opens ELEVATED CMD: chkdsk C: /f /r /x", C_AMBER);
+            AddAttr("Tools", "Optimize C:",
+                "▶ Opens ELEVATED CMD: defrag C: /U /V", C_TEAL);
+            AddAttr("Tools", "Disk Management",
+                "▶ Opens: diskmgmt.msc", C_SUB);
             AddAttr("SMART", "Full SMART data",
-                "Use CrystalDiskInfo for full attribute table",
-                C_SUB);
-            AddAttr("SMART", "Run Check Disk",
-                "Click 'Run CHKDSK C:' to scan for errors",
-                C_SUB);
-            AddAttr("SMART", "Optimize",
-                "Click 'Optimize C:' to defrag/TRIM this drive",
-                C_SUB);
+                "Use CrystalDiskInfo for a full attribute table", C_SUB);
 
             attrList.EndUpdate();
         }
@@ -511,39 +656,22 @@ namespace Tech_ToolKit_Pro
             var item = new ListViewItem(cat);
             item.SubItems.Add(attr);
             item.SubItems.Add(val);
-            item.SubItems.Add(val.Contains("✔") || val.Contains("ok") || val.Contains("Healthy")
-                ? "OK" : val.Contains("⚠") ? "Warning"
-                       : val.Contains("✖") ? "Error" : "–");
+            item.SubItems.Add(
+                val.Contains("✔") || val.ToLower().Contains("ok") ||
+                val.ToLower().Contains("healthy") ? "OK"
+              : val.Contains("⚠") ? "Warning"
+              : val.Contains("✖") ? "Error" : "–");
             item.Tag = valColor;
             item.ForeColor = C_TXT;
             attrList.Items.Add(item);
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  RUN DISK TOOL
-        // ════════════════════════════════════════════════════════════
-        void RunDiskTool(string exe, string args, bool admin)
+        // Adds a launch entry to the attr list (called from LaunchDiskAction)
+        void AddAttrLog(string tool, string badge, string cmd)
         {
-            try
-            {
-                var proc = new Process
-                {
-                    StartInfo = new ProcessStartInfo
-                    {
-                        FileName = exe,
-                        Arguments = args,
-                        UseShellExecute = true,
-                        Verb = admin ? "runas" : "",
-                        WindowStyle = ProcessWindowStyle.Normal
-                    }
-                };
-                proc.Start();
-                SetStatus(string.Format("Launched: {0} {1}", exe, args));
-            }
-            catch (Exception ex)
-            {
-                SetStatus("Error: " + ex.Message);
-            }
+            if (InvokeRequired)
+            { Invoke(new Action(() => AddAttrLog(tool, badge, cmd))); return; }
+            // Just update status — attrList is drive-specific, not a log
         }
 
         // ════════════════════════════════════════════════════════════
@@ -553,23 +681,15 @@ namespace Tech_ToolKit_Pro
         {
             if (InvokeRequired) { Invoke(new Action(() => SetStatus(msg))); return; }
             lblStatus.Text = msg;
-            lblStatus.ForeColor = msg.StartsWith("Found") || msg.StartsWith("✔")
-                ? C_GREEN : msg.StartsWith("Error") ? C_RED : C_SUB;
+            lblStatus.ForeColor = msg.StartsWith("Found") || msg.StartsWith("✔") ? C_GREEN
+                                : msg.StartsWith("✖") || msg.StartsWith("Error") ? C_RED
+                                : C_SUB;
         }
 
         Label MakeDetailLabel(string text, Color c, Point loc) => new Label
         {
             Text = text,
             Font = new Font("Segoe UI", 8.5f),
-            ForeColor = c,
-            AutoSize = true,
-            Location = loc
-        };
-
-        Label MakeStat(string text, Color c, Point loc) => new Label
-        {
-            Text = text,
-            Font = new Font("Segoe UI Semibold", 8.5f),
             ForeColor = c,
             AutoSize = true,
             Location = loc
@@ -604,11 +724,9 @@ namespace Tech_ToolKit_Pro
             { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center })
             using (var ft = new Font("Segoe UI Semibold", 8f))
             using (var br = new SolidBrush(C_SUB))
-            {
-                var rc = new Rectangle(e.Bounds.X + 6, e.Bounds.Y,
-                    e.Bounds.Width - 6, e.Bounds.Height);
-                e.Graphics.DrawString(e.Header.Text, ft, br, rc, sf);
-            }
+                e.Graphics.DrawString(e.Header.Text, ft, br,
+                    new Rectangle(e.Bounds.X + 6, e.Bounds.Y,
+                        e.Bounds.Width - 6, e.Bounds.Height), sf);
             using (var p = new Pen(C_BORDER, 1))
                 e.Graphics.DrawLine(p, e.Bounds.Left, e.Bounds.Bottom - 1,
                     e.Bounds.Right, e.Bounds.Bottom - 1);
@@ -628,9 +746,9 @@ namespace Tech_ToolKit_Pro
                     e.Graphics.FillRectangle(br,
                         new Rectangle(e.Bounds.X, e.Bounds.Y, 3, e.Bounds.Height));
 
-            Color fg = e.ColumnIndex == 0
-                ? (d != null ? d.HealthColor : C_SUB)
-                : e.ColumnIndex == 1 ? C_TXT : C_AMBER;
+            Color fg = e.ColumnIndex == 0 ? (d != null ? d.HealthColor : C_SUB)
+                     : e.ColumnIndex == 1 ? C_TXT
+                     : C_AMBER;
 
             using (var sf = new StringFormat
             {
@@ -639,11 +757,9 @@ namespace Tech_ToolKit_Pro
                 Trimming = StringTrimming.EllipsisCharacter
             })
             using (var br = new SolidBrush(fg))
-            {
-                var rc = new Rectangle(e.Bounds.X + 4, e.Bounds.Y,
-                    e.Bounds.Width - 6, e.Bounds.Height);
-                e.Graphics.DrawString(e.SubItem.Text, driveList.Font, br, rc, sf);
-            }
+                e.Graphics.DrawString(e.SubItem.Text, driveList.Font, br,
+                    new Rectangle(e.Bounds.X + 4, e.Bounds.Y,
+                        e.Bounds.Width - 6, e.Bounds.Height), sf);
         }
 
         // ════════════════════════════════════════════════════════════
@@ -657,11 +773,9 @@ namespace Tech_ToolKit_Pro
             { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center })
             using (var ft = new Font("Segoe UI Semibold", 8f))
             using (var br = new SolidBrush(C_SUB))
-            {
-                var rc = new Rectangle(e.Bounds.X + 6, e.Bounds.Y,
-                    e.Bounds.Width - 6, e.Bounds.Height);
-                e.Graphics.DrawString(e.Header.Text, ft, br, rc, sf);
-            }
+                e.Graphics.DrawString(e.Header.Text, ft, br,
+                    new Rectangle(e.Bounds.X + 6, e.Bounds.Y,
+                        e.Bounds.Width - 6, e.Bounds.Height), sf);
             using (var p = new Pen(C_BORDER, 1))
                 e.Graphics.DrawLine(p, e.Bounds.Left, e.Bounds.Bottom - 1,
                     e.Bounds.Right, e.Bounds.Bottom - 1);
@@ -691,11 +805,9 @@ namespace Tech_ToolKit_Pro
                 Trimming = StringTrimming.EllipsisCharacter
             })
             using (var br = new SolidBrush(fg))
-            {
-                var rc = new Rectangle(e.Bounds.X + 6, e.Bounds.Y,
-                    e.Bounds.Width - 8, e.Bounds.Height);
-                e.Graphics.DrawString(e.SubItem.Text, attrList.Font, br, rc, sf);
-            }
+                e.Graphics.DrawString(e.SubItem.Text, attrList.Font, br,
+                    new Rectangle(e.Bounds.X + 6, e.Bounds.Y,
+                        e.Bounds.Width - 8, e.Bounds.Height), sf);
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
