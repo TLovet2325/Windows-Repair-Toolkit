@@ -1,5 +1,5 @@
 # 🛠️ Tech ToolKit Pro
-
+![Image alt](https://github.com/TLovet2325/Tech-ToolKit-Pro/blob/94c379b82989f0b3a7a380a1017f5ac0559607db/Tech%20ToolKit%20(2).png)
 > A professional Windows maintenance and diagnostic desktop application built with C# WinForms (.NET Framework 4.x)
 
 ![Platform](https://img.shields.io/badge/platform-Windows-blue?logo=windows)
@@ -153,53 +153,6 @@ Tech_ToolKit_Pro/
 └── FormSystemReport.cs        4-tab system diagnostic report
 ```
 
-### Navigation pattern
-Child forms are embedded into `Form1`'s `contentPanel` at runtime:
-
-```csharp
-void LoadForm(Form f)
-{
-    contentPanel.Controls.Clear();
-    f.TopLevel = false;
-    f.FormBorderStyle = FormBorderStyle.None;
-    f.Dock = DockStyle.Fill;
-    contentPanel.Controls.Add(f);
-    f.Show();
-}
-```
-
-### Admin rights pattern
-All forms that need elevation use `AdminHelper`:
-
-```csharp
-// In constructor (after BuildUI):
-AdminHelper.ShowAdminBanner(this, "⚠ This feature requires admin rights.");
-
-// Before a privileged action:
-if (!AdminHelper.EnsureAdmin("Feature Name")) return;
-```
-
----
-
-## 🎨 Dark Theme
-
-All forms share the same colour palette:
-
-| Token | Hex | Usage |
-|---|---|---|
-| `C_BG` | `#0D1117` | Form background |
-| `C_SURF` | `#16171B` | Cards, panels, headers |
-| `C_SURF2` | `#1E2430` | Alternating rows |
-| `C_BLUE` | `#58A6FF` | Primary accent, links |
-| `C_GREEN` | `#3FB977` | Success, healthy |
-| `C_AMBER` | `#FFA348` | Warnings, admin required |
-| `C_RED` | `#F85149` | Errors, failures |
-| `C_PURPLE` | `#BC8CFF` | Secondary accent |
-| `C_TEAL` | `#38BDC1` | Tertiary accent |
-| `C_TXT` | `#E6EDF3` | Primary text |
-| `C_SUB` | `#8B949E` | Secondary/muted text |
-
-Custom owner-drawn `ListView` controls throughout for consistent dark rendering.
 
 ---
 
