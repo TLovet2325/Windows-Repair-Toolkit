@@ -37,6 +37,13 @@ Tech ToolKit Pro is a dark-themed, all-in-one Windows system maintenance suite. 
 
 ---
 
+## ⬇️ Download
+Get the latest version of **Tech ToolKit Pro**:
+
+[![Download Tech ToolKit Pro](https://img.shields.io/badge/Download-Tech%20ToolKit%20Pro-blue?style=for-the-badge&logo=windows)](https://github.com/TLovet2325/Tech-ToolKit-Pro/releases/tag/v1.0.0)
+
+---
+
 ## ⚙️ Requirements
 
 | Requirement | Detail |
