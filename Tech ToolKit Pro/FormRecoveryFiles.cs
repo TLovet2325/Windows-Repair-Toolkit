@@ -451,8 +451,8 @@ namespace Tech_ToolKit_Pro
                            | AnchorStyles.Left | AnchorStyles.Right;
 
             logList.Columns.Add("Time", 65);
-            logList.Columns.Add("File", 200);
-            logList.Columns.Add("Action", 80);
+            logList.Columns.Add("File", 400);
+            logList.Columns.Add("Action", 91);
             logList.Columns.Add("Result", 330);
 
             logList.DrawColumnHeader += DrawLogHeader;

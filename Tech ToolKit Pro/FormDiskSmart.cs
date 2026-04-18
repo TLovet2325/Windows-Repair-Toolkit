@@ -330,8 +330,8 @@ namespace Tech_ToolKit_Pro
             driveList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom
                              | AnchorStyles.Left | AnchorStyles.Right;
 
-            driveList.Columns.Add("Health", 58);
-            driveList.Columns.Add("Drive", 190);
+            driveList.Columns.Add("Health", 78);
+            driveList.Columns.Add("Drive", 170);
             driveList.Columns.Add("Size", 52);
 
             driveList.DrawColumnHeader += DrawDriveHeader;
@@ -385,9 +385,9 @@ namespace Tech_ToolKit_Pro
                             | AnchorStyles.Left | AnchorStyles.Right;
 
             attrList.Columns.Add("Category", 100);
-            attrList.Columns.Add("Attribute", 180);
-            attrList.Columns.Add("Value", 120);
-            attrList.Columns.Add("Status", 90);
+            attrList.Columns.Add("Attribute", 120);
+            attrList.Columns.Add("Value", 270);
+            attrList.Columns.Add("Status", 76);
 
             attrList.DrawColumnHeader += DrawAttrHeader;
             attrList.DrawItem += (s, e) => { };

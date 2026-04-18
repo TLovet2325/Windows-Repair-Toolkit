@@ -210,7 +210,7 @@ namespace Tech_ToolKit_Pro
             procView.Columns.Add("CPU %", 155);
             procView.Columns.Add("RAM (MB)", 155);
             procView.Columns.Add("Threads", 62);
-            procView.Columns.Add("Status", 88);
+            procView.Columns.Add("Status", 270);
 
             procView.DrawColumnHeader += DrawHeader;
             procView.DrawItem += (s, e) => { };
@@ -643,3 +643,43 @@ namespace Tech_ToolKit_Pro
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

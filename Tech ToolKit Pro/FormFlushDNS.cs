@@ -349,10 +349,10 @@ namespace Tech_ToolKit_Pro
             };
             logList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom
                            | AnchorStyles.Left | AnchorStyles.Right;
-            logList.Columns.Add("Time", 70);
-            logList.Columns.Add("Tool", 160);
-            logList.Columns.Add("Status", 90);
-            logList.Columns.Add("Output", 440);
+            logList.Columns.Add("Time", 90);
+            logList.Columns.Add("Tool", 260);
+            logList.Columns.Add("Status", 140);
+            logList.Columns.Add("Output", 396);
             logList.DrawColumnHeader += DrawHeader;
             logList.DrawItem += (s, e2) => { };
             logList.DrawSubItem += DrawRow;

@@ -231,8 +231,8 @@ namespace Tech_ToolKit_Pro
 
             rpList.Columns.Add("Restore Point Name", 280);
             rpList.Columns.Add("Date Created", 160);
-            rpList.Columns.Add("Type", 140);
-            rpList.Columns.Add("Sequence #", 90);
+            rpList.Columns.Add("Type", 180);
+            rpList.Columns.Add("Sequence #", 254);
 
             rpList.DrawColumnHeader += DrawHeader;
             rpList.DrawItem += (s, e) => { };

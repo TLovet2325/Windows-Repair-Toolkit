@@ -402,7 +402,7 @@ namespace Tech_ToolKit_Pro
             logList.Columns.Add("Time", 78);
             logList.Columns.Add("Tool", 170);
             logList.Columns.Add("Status", 100);
-            logList.Columns.Add("Command / Note", 480);
+            logList.Columns.Add("Command / Note", 496);
 
             logList.DrawColumnHeader += DrawHeader;
             logList.DrawItem += (s, e) => { };

@@ -281,7 +281,7 @@ namespace Tech_ToolKit_Pro
             logList.Columns.Add("Status", 70);
             logList.Columns.Add("File Name", 280);
             logList.Columns.Add("Size", 80);
-            logList.Columns.Add("Path", 400);
+            logList.Columns.Add("Path", 452);
 
             logList.DrawColumnHeader += DrawHeader;
             logList.DrawItem += (s2, e2) => { };

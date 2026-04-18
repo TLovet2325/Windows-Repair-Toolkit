@@ -273,7 +273,7 @@ namespace Tech_ToolKit_Pro
             procList.Columns.Add("CPU %", 65);
             procList.Columns.Add("Threads", 65);
             procList.Columns.Add("Status", 90);
-            procList.Columns.Add("Note", 160);
+            procList.Columns.Add("Note", 165);
 
             procList.DrawColumnHeader += DrawProcHeader;
             procList.DrawItem += (s, e) => { };
@@ -323,11 +323,11 @@ namespace Tech_ToolKit_Pro
             logList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom
                            | AnchorStyles.Left | AnchorStyles.Right;
 
-            logList.Columns.Add("Time", 65);
-            logList.Columns.Add("Action", 110);
-            logList.Columns.Add("Process", 160);
-            logList.Columns.Add("PID", 52);
-            logList.Columns.Add("Result", 260);
+            logList.Columns.Add("Time", 75);
+            logList.Columns.Add("Action", 130);
+            logList.Columns.Add("Process", 180);
+            logList.Columns.Add("PID", 70);
+            logList.Columns.Add("Result", 432);
 
             logList.DrawColumnHeader += DrawLogHeader;
             logList.DrawItem += (s2, e2) => { };

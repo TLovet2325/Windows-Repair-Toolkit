@@ -408,7 +408,7 @@ namespace Tech_ToolKit_Pro
 
             logList.Columns.Add("Time", 70);
             logList.Columns.Add("Event", 120);
-            logList.Columns.Add("Detail", 500);
+            logList.Columns.Add("Detail", 684);
 
             logList.DrawColumnHeader += DrawHeader;
             logList.DrawItem += (s, e) => { };
