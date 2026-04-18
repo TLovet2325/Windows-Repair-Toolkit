@@ -125,8 +125,8 @@ namespace Tech_ToolKit_Pro
             tools = new List<NetTool>
             {
                 new NetTool {
-                    Title       = "  Flush DNS Cache",
-                    Subtitle    = "  ipconfig /flushdns",
+                    Title       = "   Flush DNS Cache",
+                    Subtitle    = "   ipconfig /flushdns",
                     Icon        = "🌐",
                     Desc        = "Clears the DNS resolver cache. Fixes websites that won't " +
                                   "load or resolve to wrong IPs. Safe and instant — no reboot needed.",
@@ -144,8 +144,8 @@ namespace Tech_ToolKit_Pro
                     OkKeywords  = new[] { "successfully flushed", "successfully" }
                 },
                 new NetTool {
-                    Title       = "  Reset WinSock",
-                    Subtitle    = "  netsh winsock reset",
+                    Title       = "   Reset WinSock",
+                    Subtitle    = "   netsh winsock reset",
                     Icon        = "🔌",
                     Desc        = "Resets the Windows Sockets API. Fixes connectivity problems, " +
                                   "VPN issues and socket errors. Requires a reboot.",
@@ -166,8 +166,8 @@ namespace Tech_ToolKit_Pro
                     OkKeywords  = new[] { "successfully reset", "winsock reset completed" }
                 },
                 new NetTool {
-                    Title       = "  Reset TCP/IP Stack",
-                    Subtitle    = "  netsh int ip reset",
+                    Title       = "   Reset TCP/IP Stack",
+                    Subtitle    = "   netsh int ip reset",
                     Icon        = "📡",
                     Desc        = "Resets the TCP/IP stack to factory default. Fixes DHCP errors, " +
                                   "IP conflicts and limited connectivity. Requires a reboot.",
