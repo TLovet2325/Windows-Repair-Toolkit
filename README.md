@@ -63,7 +63,7 @@ Get the latest version of **Tech ToolKit Pro**:
 
 ## 🚀 Live Demo
 
-![Tech ToolKit Pro Demo](https://github.com/TLovet2325/Windows-Repair-Toolkit/blob/8853b9ac68e7bf159f2c0a35ed3f623514edc900/resized-1020x587.gif)
+![Tech ToolKit Pro Demo](https://github.com/TLovet2325/Tech-ToolKit-Pro/blob/31a44aabe9f1755cf39c807f8ae63e0fad0eb8fa/Animation.gif)
 
 ---
 
