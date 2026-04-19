@@ -14,6 +14,12 @@ Tech ToolKit Pro is a powerful desktop application built with **C# and WPF** tha
 
 ---
 
+## 📖 Overview
+
+Tech ToolKit Pro is a dark-themed, all-in-one Windows system maintenance suite. It provides 20+ tools covering disk health, system scans, network resets, security checks, file recovery, and backup — all in a single polished desktop application.
+
+---
+
 ## ⚡ Why Tech ToolKit Pro?
 
 Most Windows tools are scattered, outdated, or overly complex.  
@@ -43,6 +49,16 @@ Tech ToolKit Pro brings everything together into one **efficient, modern toolkit
 
 ---
 
+## ⚙️ Installation
+
+1. Download the latest release  
+2. Extract the archive  
+3. Run the application as **Administrator**  
+
+No installation required (portable ready)
+
+---
+
 ## 📥 Download
 
 Get the latest version of **Tech ToolKit Pro**:
@@ -50,6 +66,20 @@ Get the latest version of **Tech ToolKit Pro**:
 [![Download Tech ToolKit Pro](https://img.shields.io/badge/Download-Tech%20ToolKit%20Pro-blue?style=for-the-badge&logo=windows)](https://github.com/TLovet2325/Tech-ToolKit-Pro/releases/tag/v1.0.0)
 
 > ⚠️ **Important:** Run as Administrator for full functionality
+
+---
+
+## ⚙️ Requirements
+
+| Requirement | Detail |
+|---|---|
+| OS | Windows 10 / 11 (64-bit) |
+| Framework | .NET Framework 4.7.2+ |
+| IDE | Visual Studio 2019 / 2022 |
+| NuGet | `System.Management` |
+| COM Reference | `WUApiLib` (Windows Update form) |
+| Optional | WinRAR (for RAR backup format) |
+| Optional | `winget` / App Installer (for App Updates) |
 
 ---
 
@@ -64,16 +94,6 @@ Get the latest version of **Tech ToolKit Pro**:
 ## 🚀 Live Demo
 
 ![Tech ToolKit Pro Demo](https://github.com/TLovet2325/Tech-ToolKit-Pro/blob/31a44aabe9f1755cf39c807f8ae63e0fad0eb8fa/Animation.gif)
-
----
-
-## ⚙️ Installation
-
-1. Download the latest release  
-2. Extract the archive  
-3. Run the application as **Administrator**  
-
-No installation required (portable ready)
 
 ---
 
