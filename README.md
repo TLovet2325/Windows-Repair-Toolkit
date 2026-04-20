@@ -14,6 +14,12 @@ Tech ToolKit Pro is a powerful desktop application built with **C# and WPF** tha
 
 ---
 
+## 📖 Overview
+
+Tech ToolKit Pro is a dark-themed, all-in-one Windows system maintenance suite. It provides 20+ tools covering disk health, system scans, network resets, security checks, file recovery, and backup — all in a single polished desktop application.
+
+---
+
 ## ⚡ Why Tech ToolKit Pro?
 
 Most Windows tools are scattered, outdated, or overly complex.  
@@ -43,6 +49,16 @@ Tech ToolKit Pro brings everything together into one **efficient, modern toolkit
 
 ---
 
+## ⚙️ Installation
+
+1. Download the latest release  
+2. Extract the archive  
+3. Run the application as **Administrator**  
+
+No installation required (portable ready)
+
+---
+
 ## 📥 Download
 
 Get the latest version of **Tech ToolKit Pro**:
@@ -53,27 +69,31 @@ Get the latest version of **Tech ToolKit Pro**:
 
 ---
 
+## ⚙️ Requirements
+
+| Requirement | Detail |
+|---|---|
+| OS | Windows 10 / 11 (64-bit) |
+| Framework | .NET Framework 4.7.2+ |
+| IDE | Visual Studio 2019 / 2022 |
+| NuGet | `System.Management` |
+| COM Reference | `WUApiLib` (Windows Update form) |
+| Optional | WinRAR (for RAR backup format) |
+| Optional | `winget` / App Installer (for App Updates) |
+
+---
+
 ## 🖼️ Screenshots
 
-![Image alt](https://github.com/TLovet2325/Windows-Repair-Toolkit/blob/8853b9ac68e7bf159f2c0a35ed3f623514edc900/resize%204.png)
-![Image alt](https://github.com/TLovet2325/Windows-Repair-Toolkit/blob/8853b9ac68e7bf159f2c0a35ed3f623514edc900/resize%203.png)
-![Image alt](https://github.com/TLovet2325/Windows-Repair-Toolkit/blob/80ce5073539bd912e2eaaf3da356798080374aa8/resize%205.png)
+![Image alt](https://github.com/TLovet2325/Tech-ToolKit-Pro/blob/81edfe6993419d3e27f71b0f9d9ec72006dff7c0/dashboard.png)
+![Image alt](https://github.com/TLovet2325/Tech-ToolKit-Pro/blob/81edfe6993419d3e27f71b0f9d9ec72006dff7c0/Maintenance.png)
+![Image alt](https://github.com/TLovet2325/Tech-ToolKit-Pro/blob/81edfe6993419d3e27f71b0f9d9ec72006dff7c0/Security.png)
 
 ---
 
 ## 🚀 Live Demo
 
-![Tech ToolKit Pro Demo](https://github.com/TLovet2325/Windows-Repair-Toolkit/blob/8853b9ac68e7bf159f2c0a35ed3f623514edc900/resized-1020x587.gif)
-
----
-
-## ⚙️ Installation
-
-1. Download the latest release  
-2. Extract the archive  
-3. Run the application as **Administrator**  
-
-No installation required (portable ready)
+![Tech ToolKit Pro Demo](https://github.com/TLovet2325/Tech-ToolKit-Pro/blob/31a44aabe9f1755cf39c807f8ae63e0fad0eb8fa/Animation.gif)
 
 ---
 
