@@ -304,7 +304,7 @@ namespace Tech_ToolKit_Pro
             updateList.Columns.Add("KB Article", 100);
             updateList.Columns.Add("Size", 90);
             updateList.Columns.Add("Severity", 90);
-            updateList.Columns.Add("Status", 82);
+            updateList.Columns.Add("Status", 92);
 
             updateList.DrawColumnHeader += DrawUpdateHeader;
             updateList.DrawItem += (s, e) => { };
@@ -356,7 +356,7 @@ namespace Tech_ToolKit_Pro
 
             logList.Columns.Add("Time", 66);
             logList.Columns.Add("Update", 440);
-            logList.Columns.Add("Action", 190);
+            logList.Columns.Add("Action", 200);
             logList.Columns.Add("Result", 190);
 
             logList.DrawColumnHeader += DrawLogHeader;

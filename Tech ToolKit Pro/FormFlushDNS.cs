@@ -352,7 +352,7 @@ namespace Tech_ToolKit_Pro
             logList.Columns.Add("Time", 90);
             logList.Columns.Add("Tool", 260);
             logList.Columns.Add("Status", 140);
-            logList.Columns.Add("Output", 396);
+            logList.Columns.Add("Output", 406);
             logList.DrawColumnHeader += DrawHeader;
             logList.DrawItem += (s, e2) => { };
             logList.DrawSubItem += DrawRow;

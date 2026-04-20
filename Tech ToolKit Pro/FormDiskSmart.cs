@@ -387,7 +387,7 @@ namespace Tech_ToolKit_Pro
             attrList.Columns.Add("Category", 100);
             attrList.Columns.Add("Attribute", 120);
             attrList.Columns.Add("Value", 270);
-            attrList.Columns.Add("Status", 76);
+            attrList.Columns.Add("Status", 86);
 
             attrList.DrawColumnHeader += DrawAttrHeader;
             attrList.DrawItem += (s, e) => { };

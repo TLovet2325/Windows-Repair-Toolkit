@@ -166,19 +166,39 @@ namespace Tech_ToolKit_Pro
             WindowState = FormWindowState.Minimized;
         }
 
+        private bool isCustomMaximized = false;
+        private Size normalSize = new Size(1062, 611);
+
         private void button11_Click(object sender, EventArgs e)
         {
-            if (WindowState == FormWindowState.Normal)
+            if (!isCustomMaximized)
             {
-                WindowState = FormWindowState.Maximized;
+                // Get screen working area (without taskbar)
+                Rectangle screen = Screen.PrimaryScreen.WorkingArea;
+
+                // Resize to 85% of screen (clean modern look)
+                this.Size = new Size(
+                    (int)(screen.Width * 0.70),
+                    (int)(screen.Height * 0.75)
+                );
+
+                // Center the form
+                this.Location = new Point(
+                    (screen.Width - this.Width) / 2,
+                    (screen.Height - this.Height) / 2
+                );
+
+                isCustomMaximized = true;
             }
             else
             {
-                WindowState = FormWindowState.Normal;
+                // Restore normal size
+                this.Size = normalSize;
+                this.StartPosition = FormStartPosition.CenterScreen;
+
+                isCustomMaximized = false;
             }
-
         }
-
         private void button18_Click(object sender, EventArgs e)
         {
             Application.Exit();

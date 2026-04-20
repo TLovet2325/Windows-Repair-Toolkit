@@ -925,9 +925,11 @@
             // 
             // contentPanel
             // 
+            this.contentPanel.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
             this.contentPanel.BackColor = System.Drawing.Color.White;
             this.contentPanel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.contentPanel.Dock = System.Windows.Forms.DockStyle.Fill;
             this.contentPanel.Font = new System.Drawing.Font("Segoe UI", 7.8F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.contentPanel.Location = new System.Drawing.Point(212, 32);
             this.contentPanel.Name = "contentPanel";

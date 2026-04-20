@@ -250,7 +250,7 @@ namespace Tech_ToolKit_Pro
             appList.Columns.Add("Application", 380);
             appList.Columns.Add("Version", 90);
             appList.Columns.Add("Publisher", 170);
-            appList.Columns.Add("Install Date", 95);
+            appList.Columns.Add("Install Date", 105);
             appList.Columns.Add("Size", 112);
 
             appList.DrawColumnHeader += DrawAppHeader;
@@ -303,7 +303,7 @@ namespace Tech_ToolKit_Pro
 
             logList.Columns.Add("Time", 95);
             logList.Columns.Add("App", 400);
-            logList.Columns.Add("Action", 190);
+            logList.Columns.Add("Action", 200);
             logList.Columns.Add("Result", 201);
 
             logList.DrawColumnHeader += DrawLogHeader;

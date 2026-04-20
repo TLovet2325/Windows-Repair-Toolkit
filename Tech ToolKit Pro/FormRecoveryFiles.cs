@@ -398,7 +398,7 @@ namespace Tech_ToolKit_Pro
             fileList.Columns.Add("Original Path", 220);
             fileList.Columns.Add("Size", 74);
             fileList.Columns.Add("Deleted On", 108);
-            fileList.Columns.Add("Source", 95);
+            fileList.Columns.Add("Source", 101);
             fileList.Columns.Add("Recoverability", 110);
 
             fileList.DrawColumnHeader += DrawFileHeader;
@@ -452,7 +452,7 @@ namespace Tech_ToolKit_Pro
 
             logList.Columns.Add("Time", 65);
             logList.Columns.Add("File", 400);
-            logList.Columns.Add("Action", 91);
+            logList.Columns.Add("Action", 101);
             logList.Columns.Add("Result", 330);
 
             logList.DrawColumnHeader += DrawLogHeader;

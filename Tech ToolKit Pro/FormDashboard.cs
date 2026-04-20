@@ -100,7 +100,7 @@ namespace Tech_ToolKit_Pro
                 using (var br = new LinearGradientBrush(
                     new Rectangle(0, 0, 4, 52), C_BLUE, C_GREEN,
                     LinearGradientMode.Vertical))
-                    e.Graphics.FillRectangle(br, 0, 0, 4, 52);
+                    e.Graphics.FillRectangle(br, 0, 0, 4, 32);
             };
 
             lblTitle = new Label
@@ -206,11 +206,11 @@ namespace Tech_ToolKit_Pro
 
             // Columns
             procView.Columns.Add("Process", 175);
-            procView.Columns.Add("PID", 52);
+            procView.Columns.Add("PID", 150);
             procView.Columns.Add("CPU %", 155);
-            procView.Columns.Add("RAM (MB)", 155);
-            procView.Columns.Add("Threads", 62);
-            procView.Columns.Add("Status", 270);
+            procView.Columns.Add("RAM (MB)", 162);
+            procView.Columns.Add("Threads", 155);
+            procView.Columns.Add("Status", 82);
 
             procView.DrawColumnHeader += DrawHeader;
             procView.DrawItem += (s, e) => { };

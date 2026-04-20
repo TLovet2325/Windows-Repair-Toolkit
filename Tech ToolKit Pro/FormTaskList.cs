@@ -272,7 +272,7 @@ namespace Tech_ToolKit_Pro
             procList.Columns.Add("RAM Bar", 140);
             procList.Columns.Add("CPU %", 65);
             procList.Columns.Add("Threads", 65);
-            procList.Columns.Add("Status", 90);
+            procList.Columns.Add("Status", 100);
             procList.Columns.Add("Note", 165);
 
             procList.DrawColumnHeader += DrawProcHeader;
@@ -326,7 +326,7 @@ namespace Tech_ToolKit_Pro
             logList.Columns.Add("Time", 75);
             logList.Columns.Add("Action", 130);
             logList.Columns.Add("Process", 180);
-            logList.Columns.Add("PID", 70);
+            logList.Columns.Add("PID", 79);
             logList.Columns.Add("Result", 432);
 
             logList.DrawColumnHeader += DrawLogHeader;

@@ -313,7 +313,7 @@ namespace Tech_ToolKit_Pro
             appList.Columns.Add("Current", 135);
             appList.Columns.Add("Available", 95);
             appList.Columns.Add("Source", 80);
-            appList.Columns.Add("Status", 66);
+            appList.Columns.Add("Status", 76);
 
             appList.DrawColumnHeader += DrawAppHeader;
             appList.DrawItem += (s, e) => { };

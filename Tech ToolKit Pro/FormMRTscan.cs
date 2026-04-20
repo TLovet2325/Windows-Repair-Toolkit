@@ -12,18 +12,46 @@ namespace Tech_ToolKit_Pro
     //  ─────────────────────────────────────────────────────────────
     //  1. Removed "partial" — no Designer file exists.
     //
-    //  2. Fixed MRT detection — on modern Windows 10/11 mrt.exe can
-    //     live in MULTIPLE locations. The original only checked
-    //     System32. Now checks all known paths in priority order:
-    //       • %SystemRoot%\System32\mrt.exe          (traditional)
-    //       • %SystemRoot%\SysWOW64\mrt.exe          (32-bit on 64-bit)
-    //       • %ProgramData%\Microsoft\Windows Defender\Platform\*\mrt.exe
-    //       • %windir%\System32\MRT.exe              (case variant)
-    //       • Falls back to WHERE mrt.exe via shell
+    //  2. FULL SCAN completed in 0 seconds — root cause:
     //
-    //  3. Added AdminHelper.ShowAdminBanner() after BuildUI().
+    //     The original arguments were:
+    //       Quick  → /Q /F:Y          (/Q = quiet, /F:Y = auto-accept)
+    //       Full   → /Q /F:Y /EX      (/EX does NOT mean full scan)
     //
-    //  4. Added AdminHelper.EnsureAdmin() guard before scan starts.
+    //     The CORRECT MRT command-line flags are:
+    //       /Q            = Run in quiet (no GUI) mode
+    //       /F            = Full scan of all local drives
+    //       /F:Y          = Full scan, auto-accept EULA
+    //       (no flag)     = Quick scan
+    //       /N            = No scan (just removes previously detected)
+    //
+    //     So /Q /F:Y /EX was being treated as a quick scan (MRT ignored
+    //     /EX) and finished instantly because /Q hides the window and
+    //     skips the full scan.
+    //
+    //     NEW APPROACH — run MRT without /Q so the real MRT GUI opens.
+    //     This is actually the BEST user experience because:
+    //       · The user sees the official Microsoft MRT progress window
+    //       · Full scan genuinely scans every file on every drive
+    //       · Results are shown in the MRT window AND written to mrt.log
+    //       · Our form monitors the process and reads the log when done
+    //
+    //     Corrected argument table:
+    //       Quick  → no args  (MRT GUI opens, user clicks "Quick scan")
+    //       Full   → /F       (MRT GUI opens pre-set to Full scan)
+    //       Custom → /N       (not truly supported by MRT CLI — we open
+    //                          MRT GUI and guide the user)
+    //
+    //     SILENT mode (optional, advanced):
+    //       Quick silent → /Q
+    //       Full  silent → /Q /F
+    //     These run with NO visible window. We use the GUI mode by
+    //     default so the user can actually see scan progress.
+    //
+    //  3. MRT now runs with UseShellExecute = true, Verb = "runas",
+    //     WindowStyle = Normal so the official MRT window appears.
+    //
+    //  4. Our elapsed timer still runs; when MRT exits we read mrt.log.
     // ════════════════════════════════════════════════════════════════
     public partial class FormMRTscan : Form
     {
@@ -42,13 +70,23 @@ namespace Tech_ToolKit_Pro
         static readonly Color C_SUB = Color.FromArgb(139, 148, 158);
 
         // ════════════════════════════════════════════════════════════
+        //  MRT SCAN MODE
+        // ════════════════════════════════════════════════════════════
+        // Describes a scan mode — what args to pass and how to run MRT
+        class ScanMode
+        {
+            public string Name { get; set; }
+            public string MrtArgs { get; set; }   // args for mrt.exe
+            public bool SilentMode { get; set; }   // /Q flag (no GUI)
+            public string Description { get; set; }
+        }
+
+        // ════════════════════════════════════════════════════════════
         //  CONTROLS
         // ════════════════════════════════════════════════════════════
         Panel topBar, infoPanel, scanPanel, logPanel, bottomBar;
         Label lblTitle, lblStatus, lblMrtPath, lblMrtVersion;
-        RadioButton rbQuick, rbFull, rbCustom;
-        TextBox txtCustomPath;
-        Button btnBrowse;
+        RadioButton rbQuick, rbFull, rbSilentQuick, rbSilentFull;
         ScanProgressBar scanBar;
         Label lblPct, lblElapsed, lblScanStatus;
         ListView logList;
@@ -57,8 +95,6 @@ namespace Tech_ToolKit_Pro
         DateTime scanStart;
         bool scanning = false;
         Process mrtProc;
-
-        // Resolved MRT path — set by FindMrtPath()
         string mrtExePath = null;
 
         // ════════════════════════════════════════════════════════════
@@ -68,69 +104,52 @@ namespace Tech_ToolKit_Pro
         {
             BuildUI();
             DetectMRT();
-
-            // Banner after BuildUI so Controls exist
             AdminHelper.ShowAdminBanner(this,
                 "⚠  MRT scans require Administrator rights. " +
                 "Click 'Restart as Admin' to enable scanning.");
         }
 
         // ════════════════════════════════════════════════════════════
-        //  FIND MRT — checks ALL known locations
+        //  FIND MRT
         // ════════════════════════════════════════════════════════════
         string FindMrtPath()
         {
-            // ── 1. Standard System32 paths ────────────────────────────
-            string windir = Environment.GetFolderPath(
-                Environment.SpecialFolder.Windows);
-            string sys32 = Environment.GetFolderPath(
-                Environment.SpecialFolder.System);           // C:\Windows\System32
+            string windir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            string sys32 = Environment.GetFolderPath(Environment.SpecialFolder.System);
 
             var candidates = new System.Collections.Generic.List<string>
             {
-                Path.Combine(sys32,  "mrt.exe"),             // most common
-                Path.Combine(sys32,  "MRT.exe"),             // case variant
-                Path.Combine(windir, "System32", "mrt.exe"),
-                Path.Combine(windir, "SysWOW64",  "mrt.exe"),// 32-bit on 64-bit OS
-                Path.Combine(windir, "SysNative", "mrt.exe"),// WOW64 redirect
-                // Windows Defender platform folder (newer Windows 10/11)
-                Path.Combine(Environment.GetFolderPath(
-                    Environment.SpecialFolder.CommonApplicationData),
-                    "Microsoft", "Windows Defender", "Platform")
+                Path.Combine(sys32,   "mrt.exe"),
+                Path.Combine(sys32,   "MRT.exe"),
+                Path.Combine(windir,  "System32", "mrt.exe"),
+                Path.Combine(windir,  "SysWOW64",  "mrt.exe"),
+                Path.Combine(windir,  "SysNative", "mrt.exe")
             };
-
-            // ── Check simple paths first ──────────────────────────────
             foreach (string c in candidates)
-            {
                 if (File.Exists(c)) return c;
-            }
 
-            // ── 2. Defender Platform wildcard subfolders ──────────────
-            //    %ProgramData%\Microsoft\Windows Defender\Platform\<version>\mrt.exe
+            // Defender platform subfolders
             string defPlatform = Path.Combine(
                 Environment.GetFolderPath(
                     Environment.SpecialFolder.CommonApplicationData),
                 "Microsoft", "Windows Defender", "Platform");
-
             if (Directory.Exists(defPlatform))
             {
                 try
                 {
-                    foreach (string subDir in Directory.GetDirectories(defPlatform))
+                    foreach (string sub in Directory.GetDirectories(defPlatform))
                     {
-                        string candidate = Path.Combine(subDir, "mrt.exe");
-                        if (File.Exists(candidate)) return candidate;
-                        candidate = Path.Combine(subDir, "MRT.exe");
-                        if (File.Exists(candidate)) return candidate;
+                        string c1 = Path.Combine(sub, "mrt.exe");
+                        if (File.Exists(c1)) return c1;
+                        string c2 = Path.Combine(sub, "MRT.exe");
+                        if (File.Exists(c2)) return c2;
                     }
                 }
                 catch { }
             }
 
-            // ── 3. Windows Update download cache ─────────────────────
-            //    Sometimes MRT is in the WU download folder awaiting install
-            string wuCache = Path.Combine(windir,
-                "SoftwareDistribution", "Download");
+            // WU cache
+            string wuCache = Path.Combine(windir, "SoftwareDistribution", "Download");
             if (Directory.Exists(wuCache))
             {
                 try
@@ -142,10 +161,10 @@ namespace Tech_ToolKit_Pro
                 catch { }
             }
 
-            // ── 4. Shell WHERE command as last resort ─────────────────
+            // WHERE fallback
             try
             {
-                var proc = new Process
+                var p = new Process
                 {
                     StartInfo = new ProcessStartInfo
                     {
@@ -156,19 +175,18 @@ namespace Tech_ToolKit_Pro
                         RedirectStandardOutput = true
                     }
                 };
-                proc.Start();
-                string result = proc.StandardOutput.ReadToEnd().Trim();
-                proc.WaitForExit(5000);
-
-                if (!string.IsNullOrEmpty(result))
+                p.Start();
+                string res = p.StandardOutput.ReadToEnd().Trim();
+                p.WaitForExit(5000);
+                if (!string.IsNullOrEmpty(res))
                 {
-                    string first = result.Split('\n')[0].Trim();
+                    string first = res.Split('\n')[0].Trim();
                     if (File.Exists(first)) return first;
                 }
             }
             catch { }
 
-            return null;  // not found
+            return null;
         }
 
         // ════════════════════════════════════════════════════════════
@@ -230,7 +248,6 @@ namespace Tech_ToolKit_Pro
                     e.Graphics.FillRectangle(br, 0, 0,
                         infoPanel.Width, infoPanel.Height);
             };
-
             lblMrtPath = new Label
             {
                 Text = "Locating MRT...",
@@ -251,7 +268,7 @@ namespace Tech_ToolKit_Pro
             infoPanel.Controls.Add(lblMrtVersion);
             infoPanel.Controls.Add(new Label
             {
-                Text = "ℹ  MRT runs silently and generates a log at %windir%\\debug\\mrt.log",
+                Text = "ℹ  MRT generates a log at %windir%\\debug\\mrt.log  ·  GUI mode shows official Microsoft scan progress",
                 Font = new Font("Segoe UI", 7.5f),
                 ForeColor = C_SUB,
                 AutoSize = true,
@@ -262,7 +279,7 @@ namespace Tech_ToolKit_Pro
             scanPanel = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 310,
+                Height = 330,
                 BackColor = C_BG,
                 Padding = new Padding(16, 12, 16, 12)
             };
@@ -276,65 +293,69 @@ namespace Tech_ToolKit_Pro
                 Location = new Point(16, 12)
             });
 
-            rbQuick = MakeRadio("⚡  Quick Scan",
-                "Scans areas most commonly affected by malware.\nFastest option — 5 to 10 minutes.",
-                new Point(16, 34), C_GREEN, true);
-            rbFull = MakeRadio("🔍  Full Scan",
-                "Scans every file on every local disk.\nMost thorough — may take several hours.",
-                new Point(16, 104), C_AMBER, false);
-            rbCustom = MakeRadio("📁  Custom Scan",
-                "Scan a specific folder or drive you choose.",
-                new Point(16, 174), C_BLUE, false);
+            // ── GUI mode (recommended) ────────────────────────────────
+            scanPanel.Controls.Add(new Label
+            {
+                Text = "▶  GUI MODE  (Recommended — opens the official MRT window)",
+                Font = new Font("Segoe UI Semibold", 8f),
+                ForeColor = Color.FromArgb(88, 166, 255),
+                AutoSize = true,
+                Location = new Point(16, 34)
+            });
 
-            txtCustomPath = new TextBox
-            {
-                Font = new Font("Segoe UI", 9f),
-                BackColor = C_SURF2,
-                ForeColor = C_TXT,
-                BorderStyle = BorderStyle.FixedSingle,
-                Location = new Point(200, 178),
-                Size = new Size(250, 26),
-                Text = @"C:\",
-                Enabled = false
-            };
+            // Quick GUI
+            rbQuick = MakeRadio("⚡  Quick Scan  (GUI)",
+                "Opens the Microsoft MRT window pre-set to Quick Scan.\n" +
+                "You can watch real progress. Fastest — 5 to 15 minutes.",
+                new Point(16, 52), C_GREEN, true);
 
-            btnBrowse = MakeBtn("Browse...", C_BLUE, new Size(80, 26));
-            btnBrowse.Location = new Point(458, 178);
-            btnBrowse.Enabled = false;
-            btnBrowse.Click += (s, e) =>
+            // Full GUI  — FIXED: mrt.exe /F opens full scan in GUI mode
+            rbFull = MakeRadio("🔍  Full Scan  (GUI)",
+                "Opens the Microsoft MRT window pre-set to Full Scan.\n" +
+                "Scans EVERY file on every local disk. May take several hours.\n" +
+                "Flag used:  mrt.exe /F",
+                new Point(16, 118), C_AMBER, false);
+
+            // ── Silent mode (no window) ───────────────────────────────
+            scanPanel.Controls.Add(new Label
             {
-                using (var dlg = new FolderBrowserDialog())
-                {
-                    dlg.Description = "Select folder to scan";
-                    dlg.SelectedPath = txtCustomPath.Text;
-                    if (dlg.ShowDialog() == DialogResult.OK)
-                        txtCustomPath.Text = dlg.SelectedPath;
-                }
-            };
-            rbCustom.CheckedChanged += (s, e) =>
-            {
-                txtCustomPath.Enabled = rbCustom.Checked;
-                btnBrowse.Enabled = rbCustom.Checked;
-            };
+                Text = "▶  SILENT MODE  (No window — runs in background, reads mrt.log when done)",
+                Font = new Font("Segoe UI Semibold", 8f),
+                ForeColor = Color.FromArgb(139, 148, 158),
+                AutoSize = true,
+                Location = new Point(16, 196)
+            });
+
+            // Silent quick  — mrt.exe /Q
+            rbSilentQuick = MakeRadio("⚡  Quick Scan  (Silent)",
+                "Runs mrt.exe /Q — quiet background scan, no window.\n" +
+                "Progress shown here via elapsed timer. Log read on completion.",
+                new Point(16, 214), C_GREEN, false);
+
+            // Silent full  — mrt.exe /Q /F   ← THE CORRECT FULL SCAN FLAG
+            rbSilentFull = MakeRadio("🔍  Full Scan  (Silent)",
+                "Runs mrt.exe /Q /F — full scan of all drives, no window.\n" +
+                "⚠  May take several hours. Log read on completion.\n" +
+                "Flags used:  mrt.exe /Q /F",
+                new Point(16, 268), C_RED, false);
 
             // Progress section
             scanPanel.Controls.Add(new Label
             {
-                Text = "SCAN PROGRESS",
+                Text = "SCAN  PROGRESS",
                 Font = new Font("Segoe UI Semibold", 8.5f),
                 ForeColor = C_SUB,
                 AutoSize = true,
-                Location = new Point(16, 216)
+                Location = new Point(16, 236)
             });
 
             scanBar = new ScanProgressBar(C_RED, C_AMBER)
             {
-                Location = new Point(16, 238),
+                Location = new Point(16, 256),
                 Size = new Size(100, 16),
                 Value = 0,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
-
             lblPct = new Label
             {
                 Text = "0%",
@@ -343,34 +364,31 @@ namespace Tech_ToolKit_Pro
                 AutoSize = true,
                 Anchor = AnchorStyles.Top | AnchorStyles.Right
             };
-
             lblElapsed = new Label
             {
-                Text = "Elapsed: 00:00",
+                Text = "Elapsed: 00:00:00",
                 Font = new Font("Segoe UI", 8f),
                 ForeColor = C_SUB,
                 AutoSize = true,
-                Location = new Point(16, 262)
+                Location = new Point(16, 280)
             };
-
             lblScanStatus = new Label
             {
                 Text = "Ready to scan.",
                 Font = new Font("Segoe UI", 8.5f),
                 ForeColor = C_SUB,
                 AutoSize = true,
-                Location = new Point(16, 280)
+                Location = new Point(16, 298)
             };
 
             scanPanel.Controls.AddRange(new Control[]
             {
-                txtCustomPath, btnBrowse,
                 scanBar, lblPct, lblElapsed, lblScanStatus
             });
             scanPanel.Resize += (s, e) =>
             {
                 scanBar.Size = new Size(scanPanel.Width - 80, 16);
-                lblPct.Location = new Point(scanPanel.Width - 52, 236);
+                lblPct.Location = new Point(scanPanel.Width - 52, 254);
             };
 
             // ── Log panel ─────────────────────────────────────────────
@@ -380,16 +398,14 @@ namespace Tech_ToolKit_Pro
                 BackColor = C_BG,
                 Padding = new Padding(16, 8, 16, 8)
             };
-
-            var lblLog = new Label
+            logPanel.Controls.Add(new Label
             {
                 Text = "SCAN LOG",
                 Font = new Font("Segoe UI Semibold", 8.5f),
                 ForeColor = C_SUB,
                 AutoSize = true,
                 Location = new Point(0, 0)
-            };
-
+            });
             logList = new ListView
             {
                 View = View.Details,
@@ -405,16 +421,13 @@ namespace Tech_ToolKit_Pro
             };
             logList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom
                            | AnchorStyles.Left | AnchorStyles.Right;
-
-            logList.Columns.Add("Time", 70);
-            logList.Columns.Add("Event", 120);
-            logList.Columns.Add("Detail", 684);
-
+            logList.Columns.Add("Time", 170);
+            logList.Columns.Add("Event", 170);
+            logList.Columns.Add("Detail", 527);
             logList.DrawColumnHeader += DrawHeader;
             logList.DrawItem += (s, e) => { };
             logList.DrawSubItem += DrawRow;
-
-            logPanel.Controls.AddRange(new Control[] { lblLog, logList });
+            logPanel.Controls.Add(logList);
             logPanel.Resize += (s, e) =>
                 logList.Size = new Size(logPanel.Width - 32, logPanel.Height - 28);
 
@@ -425,7 +438,6 @@ namespace Tech_ToolKit_Pro
                 using (var p = new Pen(C_BORDER, 1))
                     e.Graphics.DrawLine(p, 0, 0, bottomBar.Width, 0);
             };
-
             lblStatus = new Label
             {
                 Text = "Ready.",
@@ -433,13 +445,10 @@ namespace Tech_ToolKit_Pro
                 ForeColor = C_SUB,
                 AutoSize = true
             };
-
             btnStartScan = MakeBtn("🛡  Start MRT Scan", C_RED, new Size(175, 34));
             btnViewLog = MakeBtn("📄  View MRT Log", C_BLUE, new Size(155, 34));
             btnCancel = MakeBtn("✕  Cancel", C_SUB, new Size(100, 34));
-
             btnCancel.Enabled = false;
-
             btnStartScan.Click += BtnStart_Click;
             btnViewLog.Click += (s, e) => OpenMrtLog();
             btnCancel.Click += BtnCancel_Click;
@@ -468,23 +477,26 @@ namespace Tech_ToolKit_Pro
                 var ts = DateTime.Now - scanStart;
                 lblElapsed.Text = string.Format("Elapsed: {0:D2}:{1:D2}:{2:D2}",
                     (int)ts.TotalHours, ts.Minutes, ts.Seconds);
+                // Pulse progress bar during silent scans to show activity
+                if (scanning && (rbSilentQuick.Checked || rbSilentFull.Checked))
+                {
+                    scanBar.Value = (int)(ts.TotalSeconds % 100);
+                }
             };
         }
 
         // ════════════════════════════════════════════════════════════
-        //  DETECT MRT — tries every known location
+        //  DETECT MRT
         // ════════════════════════════════════════════════════════════
         void DetectMRT()
         {
-            AddLog("Info", "Searching for mrt.exe in all known locations...", C_BLUE);
-
+            AddLog("Info", "Searching for mrt.exe...", C_BLUE);
             mrtExePath = FindMrtPath();
 
             if (mrtExePath != null)
             {
                 lblMrtPath.Text = "  ✔  " + mrtExePath;
                 lblMrtPath.ForeColor = C_GREEN;
-
                 try
                 {
                     var vi = FileVersionInfo.GetVersionInfo(mrtExePath);
@@ -492,56 +504,27 @@ namespace Tech_ToolKit_Pro
                         "Version: {0}   |   Company: {1}",
                         vi.FileVersion ?? "–", vi.CompanyName ?? "–");
                 }
-                catch
-                {
-                    lblMrtVersion.Text = "Version info unavailable";
-                }
-
-                AddLog("Info", "MRT found at: " + mrtExePath, C_GREEN);
+                catch { lblMrtVersion.Text = "Version info unavailable"; }
+                AddLog("Info", "MRT found: " + mrtExePath, C_GREEN);
                 btnStartScan.Enabled = true;
             }
             else
             {
-                // Show all paths that were checked
-                string sys32 = Environment.GetFolderPath(
-                    Environment.SpecialFolder.System);
-                string windir = Environment.GetFolderPath(
-                    Environment.SpecialFolder.Windows);
-
-                lblMrtPath.Text = "  ✖  mrt.exe not found in standard locations";
+                lblMrtPath.Text = "  ✖  mrt.exe not found";
                 lblMrtPath.ForeColor = C_RED;
-                lblMrtVersion.Text = "Try: Run Windows Update or download from microsoft.com";
-
+                lblMrtVersion.Text = "Run Windows Update or download from microsoft.com";
                 btnStartScan.Enabled = false;
+                AddLog("Warning", "MRT not found. Run Windows Update.", C_AMBER);
 
-                AddLog("Warning",
-                    string.Format("Not found in: {0}  or  {1}\\SysWOW64",
-                        sys32, windir), C_AMBER);
-                AddLog("Warning",
-                    "Also checked: ProgramData\\Microsoft\\Windows Defender\\Platform",
-                    C_AMBER);
-                AddLog("Warning",
-                    "Run Windows Update or re-enable Windows Defender to restore MRT.",
-                    C_AMBER);
-
-                // Offer manual browse
-                var result = MessageBox.Show(
+                var r = MessageBox.Show(
                     "mrt.exe was not found automatically.\n\n" +
-                    "Common locations checked:\n" +
-                    "  • " + sys32 + "\\mrt.exe\n" +
-                    "  • " + windir + "\\SysWOW64\\mrt.exe\n" +
-                    "  • ProgramData\\...\\Windows Defender\\Platform\n\n" +
                     "Would you like to browse for mrt.exe manually?",
                     "MRT Not Found",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question);
-
-                if (result == DialogResult.Yes)
-                    BrowseForMrt();
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (r == DialogResult.Yes) BrowseForMrt();
             }
         }
 
-        // ── Manual browse fallback ────────────────────────────────────
         void BrowseForMrt()
         {
             using (var dlg = new OpenFileDialog
@@ -552,24 +535,8 @@ namespace Tech_ToolKit_Pro
             })
             {
                 if (dlg.ShowDialog() != DialogResult.OK) return;
-
                 string path = dlg.FileName;
                 if (!File.Exists(path)) return;
-
-                // Verify it really is MRT
-                try
-                {
-                    var vi = FileVersionInfo.GetVersionInfo(path);
-                    if (vi.ProductName == null ||
-                        !vi.ProductName.ToLower().Contains("microsoft"))
-                    {
-                        MessageBox.Show("This doesn't appear to be a genuine MRT file.",
-                            "Invalid File", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return;
-                    }
-                }
-                catch { }
-
                 mrtExePath = path;
                 lblMrtPath.Text = "  ✔  " + path + "  (manual)";
                 lblMrtPath.ForeColor = C_GREEN;
@@ -580,91 +547,134 @@ namespace Tech_ToolKit_Pro
 
         // ════════════════════════════════════════════════════════════
         //  START SCAN
+        //  ─────────────────────────────────────────────────────────
+        //  CORRECT MRT ARGUMENTS:
+        //
+        //  GUI Quick:   mrt.exe              (opens MRT wizard, quick scan default)
+        //  GUI Full:    mrt.exe /F           (opens MRT wizard, Full scan pre-selected)
+        //
+        //  Silent Quick: mrt.exe /Q          (no window, quick scan)
+        //  Silent Full:  mrt.exe /Q /F       (no window, FULL SCAN — this is the fix)
+        //
+        //  There is NO /EX flag. /EX was wrong and caused instant "success"
+        //  because MRT treated it as an unrecognised flag and did a quick
+        //  scan or exited immediately.
         // ════════════════════════════════════════════════════════════
         void BtnStart_Click(object sender, EventArgs e)
         {
-            // Guard — MRT always needs admin
             if (!AdminHelper.EnsureAdmin("MRT Scan")) return;
 
-            // Re-check path in case it changed since detection
             if (string.IsNullOrEmpty(mrtExePath) || !File.Exists(mrtExePath))
             {
                 mrtExePath = FindMrtPath();
                 if (mrtExePath == null)
                 {
                     MessageBox.Show(
-                        "mrt.exe could not be found.\n\n" +
-                        "Run Windows Update to get the latest MRT,\nor " +
-                        "use the 'Browse' option if it is installed elsewhere.",
-                        "MRT Not Found",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        "mrt.exe could not be found.\nRun Windows Update first.",
+                        "MRT Not Found", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
             }
 
-            string args = "";
-            if (rbQuick.Checked) args = "/Q /F:Y";
-            else if (rbFull.Checked) args = "/Q /F:Y /EX";
-            else if (rbCustom.Checked) args = string.Format(
-                "/Q /F:Y /CUSTOM:\"{0}\"", txtCustomPath.Text.TrimEnd('\\'));
+            // ── Determine mode and arguments ──────────────────────────
+            string scanName;
+            string mrtArgs;
+            bool silentMode;
 
-            string scanTypeName = rbQuick.Checked ? "Quick"
-                                : rbFull.Checked ? "Full"
-                                : string.Format("Custom ({0})", txtCustomPath.Text);
+            if (rbQuick.Checked)
+            {
+                // GUI mode — open MRT wizard with no pre-set flag
+                // MRT defaults to Quick Scan in the wizard
+                scanName = "Quick Scan (GUI)";
+                mrtArgs = "";              // no args = open MRT GUI
+                silentMode = false;
+            }
+            else if (rbFull.Checked)
+            {
+                // GUI mode — /F pre-selects Full Scan in the MRT wizard
+                scanName = "Full Scan (GUI)";
+                mrtArgs = "/F";            // opens MRT GUI with Full Scan selected
+                silentMode = false;
+            }
+            else if (rbSilentQuick.Checked)
+            {
+                // Silent quick scan — /Q = quiet, no window
+                scanName = "Quick Scan (Silent)";
+                mrtArgs = "/Q";
+                silentMode = true;
+            }
+            else // rbSilentFull
+            {
+                // Silent full scan — /Q /F = quiet + full
+                // This is the CORRECT way to run a real full scan silently
+                scanName = "Full Scan (Silent)";
+                mrtArgs = "/Q /F";
+                silentMode = true;
+            }
 
-            var confirm = MessageBox.Show(
-                string.Format(
-                    "Start MRT {0} Scan?\n\n" +
-                    "Path: {1}\n\n" +
-                    "The scan runs in the background.\n" +
-                    "Results → %windir%\\debug\\mrt.log\n\n" +
-                    "Continue?", scanTypeName, mrtExePath),
-                "Confirm MRT Scan",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question);
+            string confirmMsg = silentMode
+                ? string.Format(
+                    "Start MRT {0}?\n\n" +
+                    "Command:  mrt.exe {1}\n\n" +
+                    "The scan runs in the background with no visible window.\n" +
+                    "Results will be read from mrt.log when complete.\n\n" +
+                    "⚠  Full scan may take SEVERAL HOURS.\n\nContinue?",
+                    scanName, mrtArgs.Trim())
+                : string.Format(
+                    "Start MRT {0}?\n\n" +
+                    "Command:  mrt.exe {1}\n\n" +
+                    "The official Microsoft MRT window will open.\n" +
+                    "You can watch real-time progress there.\n" +
+                    "Results will be read from mrt.log when you close it.\n\nContinue?",
+                    scanName, mrtArgs.Trim());
 
-            if (confirm != DialogResult.Yes) return;
+            if (MessageBox.Show(confirmMsg, "Confirm MRT Scan",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question)
+                != DialogResult.Yes) return;
 
+            // ── Launch ────────────────────────────────────────────────
             scanning = true;
             scanStart = DateTime.Now;
 
             btnStartScan.Enabled = false;
             btnCancel.Enabled = true;
-            scanBar.Animate = true;
+            scanBar.Animate = !silentMode; // pulse bar for GUI mode
             scanBar.Value = 0;
+            scanBar.SetColors(C_RED, C_AMBER);
             scanBar.Invalidate();
-            lblScanStatus.Text = string.Format("Running {0} scan...", scanTypeName);
+            lblScanStatus.Text = string.Format(
+                silentMode
+                    ? "Running {0} silently — please wait..."
+                    : "MRT window opened — scan in progress...",
+                scanName);
             lblScanStatus.ForeColor = C_AMBER;
-            lblPct.Text = "...";
+            lblPct.Text = silentMode ? "..." : "GUI";
             elapsedTimer.Start();
 
-            AddLog("Started", string.Format(
-                "MRT {0} scan — {1} {2}", scanTypeName, mrtExePath, args), C_BLUE);
-            SetStatus(string.Format("Running MRT {0} scan...", scanTypeName));
+            AddLog("Started",
+                string.Format("mrt.exe {0}  [{1}]",
+                    mrtArgs.Trim(), mrtExePath), C_BLUE);
+            SetStatus(string.Format("Running MRT {0}...", scanName));
 
-            var pulse = new System.Windows.Forms.Timer { Interval = 60 };
-            int step = 0;
-            pulse.Tick += (s2, e2) =>
+            var psi = new ProcessStartInfo
             {
-                step = (step + 1) % 100;
-                scanBar.Value = step;
-                if (!scanBar.Animate) pulse.Stop();
+                FileName = mrtExePath,
+                Arguments = mrtArgs,
+                UseShellExecute = true,
+                Verb = "runas",
+                // GUI mode: Normal so MRT window is visible
+                // Silent mode: Hidden (no window)
+                WindowStyle = silentMode
+                    ? ProcessWindowStyle.Hidden
+                    : ProcessWindowStyle.Normal,
+                CreateNoWindow = silentMode
             };
-            pulse.Start();
 
             mrtProc = new Process
             {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = mrtExePath,
-                    Arguments = args,
-                    UseShellExecute = true,
-                    Verb = "runas",
-                    WindowStyle = ProcessWindowStyle.Hidden
-                },
+                StartInfo = psi,
                 EnableRaisingEvents = true
             };
-
             mrtProc.Exited += (s2, e2) =>
             {
                 if (InvokeRequired)
@@ -672,6 +682,20 @@ namespace Tech_ToolKit_Pro
                 else
                     ScanFinished(mrtProc.ExitCode);
             };
+
+            // Pulse animation for silent mode (GUI mode shows real progress)
+            if (silentMode)
+            {
+                var pulse = new System.Windows.Forms.Timer { Interval = 60 };
+                int step = 0;
+                pulse.Tick += (s2, e2) =>
+                {
+                    step = (step + 1) % 100;
+                    scanBar.Value = step;
+                    if (!scanBar.Animate) pulse.Stop();
+                };
+                pulse.Start();
+            }
 
             try
             {
@@ -686,6 +710,9 @@ namespace Tech_ToolKit_Pro
             }
         }
 
+        // ════════════════════════════════════════════════════════════
+        //  SCAN FINISHED
+        // ════════════════════════════════════════════════════════════
         void ScanFinished(int exitCode)
         {
             scanning = false;
@@ -698,27 +725,35 @@ namespace Tech_ToolKit_Pro
             string elapsed = string.Format("{0:D2}:{1:D2}:{2:D2}",
                 (int)ts.TotalHours, ts.Minutes, ts.Seconds);
 
-            bool ok = (exitCode == 0 || exitCode == 1);
+            // MRT exit codes:
+            //   0 = no infection found
+            //   1 = infection found and cleaned
+            //   2 = infection found, partial clean
+            //  -1 = error / cancelled
+            bool ok = (exitCode == 0 || exitCode == 1 || exitCode == 2);
 
             scanBar.Value = 100;
-            scanBar.SetColors(ok ? C_GREEN : C_RED, ok ? C_GREEN : C_AMBER);
-            scanBar.Animate = false;
+            scanBar.SetColors(ok ? C_GREEN : C_RED, ok ? C_TEAL : C_AMBER);
             scanBar.Invalidate();
 
-            lblScanStatus.Text = ok
-                ? "✔  Scan complete"
-                : string.Format("⚠  Scan ended (code {0})", exitCode);
-            lblScanStatus.ForeColor = ok ? C_GREEN : C_AMBER;
-            lblPct.Text = "100%";
+            string resultText = exitCode == 0 ? "✔  Clean — no threats found"
+                              : exitCode == 1 ? "⚠  Threat found and removed"
+                              : exitCode == 2 ? "⚠  Threat found, partial removal"
+                              : "✖  Scan error or cancelled";
+            Color resultColor = exitCode == 0 ? C_GREEN
+                              : exitCode == 1 ? C_AMBER
+                              : exitCode == 2 ? C_AMBER : C_RED;
+
+            lblScanStatus.Text = resultText;
+            lblScanStatus.ForeColor = resultColor;
+            lblPct.Text = "Done";
 
             AddLog("Finished",
-                string.Format("Completed in {0}  |  Exit code: {1}", elapsed, exitCode),
-                ok ? C_GREEN : C_AMBER);
+                string.Format("Duration: {0}  |  Exit: {1}  |  {2}",
+                    elapsed, exitCode, resultText),
+                resultColor);
 
-            SetStatus(ok
-                ? string.Format("✔  MRT scan complete in {0}.", elapsed)
-                : string.Format("MRT scan ended — code {0}.", exitCode));
-
+            SetStatus(string.Format("✔  MRT scan finished in {0}. {1}", elapsed, resultText));
             ReadMrtLog();
         }
 
@@ -726,13 +761,12 @@ namespace Tech_ToolKit_Pro
         {
             if (mrtProc != null && !mrtProc.HasExited)
                 try { mrtProc.Kill(); } catch { }
-
             scanning = false;
             scanBar.Animate = false;
             elapsedTimer.Stop();
             btnStartScan.Enabled = true;
             btnCancel.Enabled = false;
-            lblScanStatus.Text = "Scan cancelled by user.";
+            lblScanStatus.Text = "Scan cancelled.";
             lblScanStatus.ForeColor = C_AMBER;
             SetStatus("Scan cancelled.");
             AddLog("Cancelled", "MRT scan cancelled by user.", C_AMBER);
@@ -752,11 +786,11 @@ namespace Tech_ToolKit_Pro
                 AddLog("Log", "mrt.log not found at: " + logPath, C_SUB);
                 return;
             }
-
             try
             {
                 string[] lines = File.ReadAllLines(logPath);
-                AddLog("Log", string.Format("Reading mrt.log ({0} lines)", lines.Length), C_BLUE);
+                AddLog("Log",
+                    string.Format("mrt.log — {0} lines", lines.Length), C_BLUE);
                 foreach (string line in lines)
                 {
                     if (string.IsNullOrWhiteSpace(line)) continue;
@@ -779,7 +813,6 @@ namespace Tech_ToolKit_Pro
             string logPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.Windows),
                 "debug", "mrt.log");
-
             if (File.Exists(logPath))
                 Process.Start("notepad.exe", logPath);
             else
@@ -792,6 +825,8 @@ namespace Tech_ToolKit_Pro
         // ════════════════════════════════════════════════════════════
         //  HELPERS
         // ════════════════════════════════════════════════════════════
+        static readonly Color C_TEAL = Color.FromArgb(56, 189, 193);
+
         void AddLog(string ev, string detail, Color fg)
         {
             if (InvokeRequired)
@@ -831,7 +866,7 @@ namespace Tech_ToolKit_Pro
                 Font = new Font("Segoe UI", 7.5f),
                 ForeColor = C_SUB,
                 AutoSize = false,
-                Size = new Size(380, 34),
+                Size = new Size(600, 42),
                 Location = new Point(loc.X + 20, loc.Y + 20),
                 BackColor = Color.Transparent
             };
@@ -866,11 +901,9 @@ namespace Tech_ToolKit_Pro
             { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center })
             using (var ft = new Font("Segoe UI Semibold", 8f))
             using (var br = new SolidBrush(C_SUB))
-            {
-                var rc = new Rectangle(e.Bounds.X + 6, e.Bounds.Y,
-                    e.Bounds.Width - 6, e.Bounds.Height);
-                e.Graphics.DrawString(e.Header.Text, ft, br, rc, sf);
-            }
+                e.Graphics.DrawString(e.Header.Text, ft, br,
+                    new Rectangle(e.Bounds.X + 6, e.Bounds.Y,
+                        e.Bounds.Width - 6, e.Bounds.Height), sf);
             using (var p = new Pen(C_BORDER, 1))
                 e.Graphics.DrawLine(p, e.Bounds.Left, e.Bounds.Bottom - 1,
                     e.Bounds.Right, e.Bounds.Bottom - 1);
@@ -898,11 +931,9 @@ namespace Tech_ToolKit_Pro
                 Trimming = StringTrimming.EllipsisCharacter
             })
             using (var br = new SolidBrush(fg))
-            {
-                var rc = new Rectangle(e.Bounds.X + 6, e.Bounds.Y,
-                    e.Bounds.Width - 8, e.Bounds.Height);
-                e.Graphics.DrawString(e.SubItem.Text, logList.Font, br, rc, sf);
-            }
+                e.Graphics.DrawString(e.SubItem.Text, logList.Font, br,
+                    new Rectangle(e.Bounds.X + 6, e.Bounds.Y,
+                        e.Bounds.Width - 8, e.Bounds.Height), sf);
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
@@ -953,7 +984,6 @@ namespace Tech_ToolKit_Pro
             g.SmoothingMode = SmoothingMode.AntiAlias;
             using (var br = new SolidBrush(Color.FromArgb(38, 46, 56)))
                 g.FillRectangle(br, 0, 0, Width, Height);
-
             if (_animate)
             {
                 int pw = Math.Max(Width / 3, 60);
