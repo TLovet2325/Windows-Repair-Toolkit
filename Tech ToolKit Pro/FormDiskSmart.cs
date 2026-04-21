@@ -224,8 +224,8 @@ namespace Tech_ToolKit_Pro
                     Label       = "🔧  Run CHKDSK C:",
                     Accent      = C_AMBER,
                     BtnSize     = new Size(158, 34),
-                    Description = "Launching elevated CHKDSK — CMD window will open",
-                    Badge       = "🔒 Elevated CMD",
+                    Description = "CHKDSK window will open",
+                    Badge       = "🔒 CMD",
                     // PowerShell elevates, opens CMD with /K so window stays
                     LaunchExe  = "pwsh.exe",
                     LaunchArgs = "-NoProfile -NoExit -Command \"echo Y | chkdsk C: /f /r /x\"",
@@ -234,8 +234,8 @@ namespace Tech_ToolKit_Pro
                     Label       = "⚡  Optimize C:",
                     Accent      = C_TEAL,
                     BtnSize     = new Size(140, 34),
-                    Description = "Launching elevated Defrag/TRIM — CMD window will open",
-                    Badge       = "🔒 Elevated CMD",
+                    Description = "Defrag/TRIM window will open",
+                    Badge       = "🔒 CMD",
                     // Same pattern: PowerShell requests UAC, then opens CMD
                     LaunchExe  = "pwsh.exe",
                     LaunchArgs = "-NoProfile -NoExit -Command \"defrag C: /U /V\"",
