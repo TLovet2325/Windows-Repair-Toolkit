@@ -9,37 +9,21 @@ using System.Windows.Forms;
 namespace Tech_ToolKit_Pro
 {
     // ════════════════════════════════════════════════════════════════
-    //  ROOT CAUSE ANALYSIS & FIXES
+    //  FormDiskMaintenance
     //  ─────────────────────────────────────────────────────────────
-    //  PROBLEM 1 — "The system cannot find the file specified" +
-    //              "Exit -1" / "Exit 1" on sfc, defrag, DISM, etc.
+    //  SHELL FALLBACK CHAIN
+    //  ─────────────────────────────────────────────────────────────
+    //  Best:     pwsh.exe         (PowerShell 7 — not always present)
+    //  Fallback: powershell.exe   (Windows PowerShell 5.1 — always on Win10+)
+    //  Last:     cmd.exe          (always present on every Windows version)
     //
-    //  Root cause: The code was setting UseShellExecute = true (needed
-    //  for "runas" elevation) but System32 tools like sfc.exe, defrag
-    //  and DISM.exe are NOT on the PATH for the shell in all contexts,
-    //  especially when launched from a non-elevated process. The OS
-    //  can't locate them without their full path.
+    //  Detection is done once at startup via CheckCommandExists() which
+    //  runs "where <exe>" silently and caches the result.  Every tool
+    //  calls ResolveShell(command, keepOpen) which returns the best
+    //  available (exe, args, label) tuple automatically.
     //
-    //  Fix: Route every tool through  cmd.exe /C <command>  with runas.
-    //  cmd.exe IS always on the PATH and always resolves System32 tools
-    //  correctly.  So the Exe becomes "pwsh.exe" and Args becomes
-    //  "-NoProfile -NoExit -Command \"sfc /scannow\"" OR "/K sfc /scannow"
-    //  if you use "cmd.exe" etc.  The window appears as before (ShowWindow)
-    //  and elevation is preserved via Verb = "runas".
-    //
-    //  PROBLEM 2 — Blurry / strikethrough subtitle text
-    //
-    //  Root cause: Labels with AutoSize = false + a custom Paint handler
-    //  that calls DrawString on top of whatever WinForms already painted
-    //  causes double-rendering. The system draws the label's own text,
-    //  then the Paint event draws it again slightly offset → blurry.
-    //
-    //  Fix: Use AutoSize = true on all card labels.  Set the label's
-    //  own text and let WinForms render it normally — no custom Paint.
-    //  For overflow protection on narrow cards, use a plain label with
-    //  MaximumSize instead of a Paint-based ellipsis.
-    //
-    //  PROBLEM 3 — "partial" keyword with no Designer file → removed.
+    //  The active shell name is shown in the top-bar subtitle so the
+    //  user always knows which shell is being used.
     // ════════════════════════════════════════════════════════════════
     public partial class FormDiskMaintenance : Form
     {
@@ -61,34 +45,105 @@ namespace Tech_ToolKit_Pro
         static readonly Color C_SUB = Color.FromArgb(139, 148, 158);
 
         // ════════════════════════════════════════════════════════════
+        //  SHELL DETECTION  (cached, evaluated once)
+        // ════════════════════════════════════════════════════════════
+        bool? _pwshAvailable = null;   // pwsh.exe   — PowerShell 7
+        bool? _ps51Available = null;   // powershell.exe — PS 5.1
+
+        bool PwshExists()
+        {
+            if (_pwshAvailable.HasValue) return _pwshAvailable.Value;
+            _pwshAvailable = CheckCommandExists("pwsh.exe");
+            return _pwshAvailable.Value;
+        }
+
+        bool Ps51Exists()
+        {
+            if (_ps51Available.HasValue) return _ps51Available.Value;
+            _ps51Available = CheckCommandExists("powershell.exe");
+            return _ps51Available.Value;
+        }
+
+        // Uses "where <exe>" to test whether an executable is on the PATH
+        bool CheckCommandExists(string exe)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "where",
+                    Arguments = exe,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true
+                };
+                using (var p = Process.Start(psi))
+                {
+                    string output = p.StandardOutput.ReadToEnd();
+                    p.WaitForExit();
+                    return !string.IsNullOrWhiteSpace(output);
+                }
+            }
+            catch { return false; }
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  TRIPLE FALLBACK RESOLVER
+        //  ─────────────────────────────────────────────────────────
+        //  Returns (exe, args, label) for the best available shell.
+        //
+        //  keepOpen = true  → window stays open after command finishes
+        //    PS:  -NoExit        keeps the PowerShell window open
+        //    CMD: /K             keeps the CMD window open
+        //  keepOpen = false → window closes when command finishes
+        //    PS:  (no -NoExit)   PS window exits when done
+        //    CMD: /C             CMD exits when done
+        // ════════════════════════════════════════════════════════════
+        (string exe, string args, string label) ResolveShell(
+            string command, bool keepOpen = true)
+        {
+            if (PwshExists())
+            {
+                return (
+                    "pwsh.exe",
+                    string.Format("-NoProfile {0} -Command \"{1}\"",
+                        keepOpen ? "-NoExit" : "", command),
+                    "PowerShell 7"
+                );
+            }
+            if (Ps51Exists())
+            {
+                return (
+                    "powershell.exe",
+                    string.Format("-NoProfile {0} -Command \"{1}\"",
+                        keepOpen ? "-NoExit" : "", command),
+                    "Windows PowerShell"
+                );
+            }
+            // Last resort — cmd.exe always exists
+            return (
+                "cmd.exe",
+                string.Format("{0} {1}", keepOpen ? "/K" : "/C", command),
+                "Command Prompt"
+            );
+        }
+
+        // ════════════════════════════════════════════════════════════
         //  TOOL MODEL
         // ════════════════════════════════════════════════════════════
         class DiskTool
         {
             public string Title { get; set; }
-            public string Subtitle { get; set; }  // display only
+            public string Subtitle { get; set; }
             public string Icon { get; set; }
             public string Desc { get; set; }
             public Color Accent { get; set; }
-
-            // ── Launcher fields ──────────────────────────────────────
-            // All elevated tools use:
-            //   LaunchExe  = "cmd.exe"
-            //   LaunchArgs = "/C <actual command>"
-            //   NeedsAdmin = true
-            //   ShowWindow = true
-            //
-            // Non-elevated tools can use their exe directly with
-            //   UseShellExecute = false  (no runas needed).
             public string LaunchExe { get; set; }
             public string LaunchArgs { get; set; }
             public bool NeedsAdmin { get; set; } = true;
             public bool ShowWindow { get; set; } = true;
-
-            // Special multi-step handler
             public bool IsSpecial { get; set; }
             public string SpecialKey { get; set; } = "";
-
             public Button BtnRun { get; set; }
             public DiskProgressBar PBar { get; set; }
             public Label StatusL { get; set; }
@@ -97,7 +152,7 @@ namespace Tech_ToolKit_Pro
         readonly List<DiskTool> tools = new List<DiskTool>();
 
         Panel topBar, bottomBar, logPanel;
-        Label lblSub, lblStatus;
+        Label lblSub, lblStatus, lblShellBadge;
         ListView logList;
         Button btnRunAll, btnClearLog;
         TableLayoutPanel toolGrid;
@@ -109,127 +164,218 @@ namespace Tech_ToolKit_Pro
         // ════════════════════════════════════════════════════════════
         public FormDiskMaintenance()
         {
+            // Detect shell first — InitTools() uses ResolveShell()
+            PwshExists();
+            Ps51Exists();
+
             InitTools();
             BuildUI();
+
             AdminHelper.ShowAdminBanner(this,
                 "⚠  Most tools require Administrator rights. " +
                 "Click 'Restart as Admin' to unlock them.");
         }
 
         // ════════════════════════════════════════════════════════════
-        //  DEFINE TOOLS
+        //  INIT TOOLS  — ResolveShell() picks the best available shell
         //  ─────────────────────────────────────────────────────────
-        //  KEY RULE:  Any tool that needs elevation uses:
-        //    LaunchExe  = "cmd.exe"
-        //    LaunchArgs = "/C <the real command>"
-        //    NeedsAdmin = true
-        //    ShowWindow = true
+        //  Each tool calls ResolveShell(command, keepOpen:true) so the
+        //  terminal window stays open after the command finishes and the
+        //  user can read the output.
         //
-        //  This guarantees the System32 path is always resolved
-        //  because cmd.exe handles it, and elevation works via runas.
+        //  TrustedInstaller pre-check (SFC + DISM):
+        //    Ensures TrustedInstaller service is running before the scan
+        //    starts.  If it isn't, sc config + net start launch it.
+        //    This prevents false "corrupted files found" reports.
+        //
+        //  DISM chain: CheckHealth → RestoreHealth
+        //    CheckHealth is fast and reads the manifest.  If it passes,
+        //    RestoreHealth repairs any damage (may download from WU).
+        //
+        //  CHKDSK: echo Y |  auto-confirms "schedule on next boot?" so
+        //    the process never stalls waiting for user input.
+        //
+        //  Defrag: /U /V for real-time progress and verbose output.
         // ════════════════════════════════════════════════════════════
         void InitTools()
         {
             tools.Clear();
-            tools.AddRange(new[]
+
+            // ── 1. Disable Hibernation ────────────────────────────────
+            var s1 = ResolveShell("powercfg /h off", keepOpen: true);
+            tools.Add(new DiskTool
             {
-                new DiskTool {
-                    Title      = "   Disable Hibernation",
-                    Subtitle   = "  powercfg /h off",
-                    Icon       = "💤",
-                    Desc       = "Turns off hibernation and deletes hiberfil.sys to reclaim space.",
-                    Accent     = C_BLUE,
-                    LaunchExe  = "pwsh.exe",
-                    LaunchArgs = "-NoProfile -NoExit -Command \"powercfg /h off\"",
-                    NeedsAdmin = true,
-                    ShowWindow = true
-                },
-                new DiskTool {
-                    Title      = "   Check Disk (CHKDSK)",
-                    Subtitle   = "  chkdsk C: /f /r /x",
-                    Icon       = "🔍",
-                    Desc       = "Scans drive C: for file-system issues and bad sectors.",
-                    Accent     = C_AMBER,
-                    LaunchExe  = "pwsh.exe",
-                    LaunchArgs = "-NoProfile -NoExit -Command \"echo Y | chkdsk C: /f /r /x\"",
-                    NeedsAdmin = true,
-                    ShowWindow = true
-                },
-                new DiskTool {
-                    Title      = "   SFC System Scan",
-                    Subtitle   = "  sfc /scannow",
-                    Icon       = "🛡",
-                    Desc       = "Validates protected Windows files and restores corrupted copies.",
-                    Accent     = C_GREEN,
-                    LaunchExe  = "pwsh.exe",
-                    LaunchArgs = "-NoProfile -NoExit -Command \"sfc /scannow\"",
-                    NeedsAdmin = true,
-                    ShowWindow = true
-                },
-                new DiskTool {
-                    Title      = "   DISM Health Restore",
-                    Subtitle   = "  DISM /Cleanup-Image /RestoreHealth",
-                    Icon       = "🔧",
-                    Desc       = "Repairs the Windows component store. Run before or after SFC.",
-                    Accent     = C_PURPLE,
-                    LaunchExe  = "cmd.exe",
-                    LaunchArgs = "/C DISM /Online /Cleanup-Image /RestoreHealth",
-                    NeedsAdmin = true,
-                    ShowWindow = true
-                },
-                new DiskTool {
-                    Title      = "   Optimize Drive",
-                    Subtitle   = "  defrag C: /U /V",
-                    Icon       = "⚡",
-                    Desc       = "Runs defrag or TRIM on drive C: to improve performance.",
-                    Accent     = C_TEAL,
-                    LaunchExe  = "pwsh.exe",
-                    LaunchArgs = "-NoProfile -NoExit -Command \"defrag C: /U /V\"",
-                    NeedsAdmin = true,
-                    ShowWindow = true
-                },
-                new DiskTool {
-                    Title      = "   Clear Update Cache",
-                    Subtitle   = "  Stop → Delete → Restart wuauserv",
-                    Icon       = "🔄",
-                    Desc       = "Stops update services, clears the download cache, then restarts them.",
-                    Accent     = C_ORANGE,
-                    IsSpecial  = true,
-                    SpecialKey = "wucache"
-                },
-                new DiskTool {
-                    Title      = "   Clear Event Logs",
-                    Subtitle   = "  wevtutil cl System / Application",
-                    Icon       = "📋",
-                    Desc       = "Clears Windows System, Application and Security event logs.",
-                    Accent     = C_RED,
-                    LaunchExe  = "cmd.exe",
-                    LaunchArgs = "/C wevtutil cl System & wevtutil cl Application & wevtutil cl Security",
-                    NeedsAdmin = true,
-                    ShowWindow = false
-                },
-                new DiskTool {
-                    Title      = "   Compact OS",
-                    Subtitle   = "  compact /CompactOS:always",
-                    Icon       = "🗜",
-                    Desc       = "Compresses Windows OS files to save 1–3 GB on low-storage devices.",
-                    Accent     = C_TEAL,
-                    LaunchExe  = "cmd.exe",
-                    LaunchArgs = "/C compact /CompactOS:always",
-                    NeedsAdmin = true,
-                    ShowWindow = true
-                },
-                new DiskTool {
-                    Title      = "   Control Panel",
-                    Subtitle   = "  control.exe",
-                    Icon       = "🖥",
-                    Desc       = "Opens the Windows Control Panel for system settings and hardware.",
-                    Accent     = C_BLUE,
-                    LaunchExe  = "control.exe",
-                    LaunchArgs = "",
-                    NeedsAdmin = false,
-                    ShowWindow = true
-                }
+                Title = "    Disable Hibernation",
+                Subtitle = "   powercfg /h off",
+                Icon = "💤",
+                Desc = "Turns off hibernation and deletes hiberfil.sys to reclaim disk space.",
+                Accent = C_BLUE,
+                LaunchExe = s1.exe,
+                LaunchArgs = s1.args,
+                NeedsAdmin = true,
+                ShowWindow = true
+            });
+
+            // ── 2. Check Disk ─────────────────────────────────────────
+            // echo Y auto-confirms "schedule on next boot?" prompt
+            var s2 = ResolveShell("echo Y | chkdsk C: /f /r /x", keepOpen: true);
+            tools.Add(new DiskTool
+            {
+                Title = "    Check Disk (CHKDSK)",
+                Subtitle = "   chkdsk C: /f /r /x",
+                Icon = "🔍",
+                Desc = "Scans drive C: for file-system errors and bad sectors. May require reboot.",
+                Accent = C_AMBER,
+                LaunchExe = s2.exe,
+                LaunchArgs = s2.args,
+                NeedsAdmin = true,
+                ShowWindow = true
+            });
+
+            // ── 3. SFC — TrustedInstaller pre-check ──────────────────
+            var s3 = ResolveShell(
+                "sc query TrustedInstaller | find `\"RUNNING`\" > $null; " +
+                "if ($LASTEXITCODE -ne 0) { " +
+                    "sc.exe config TrustedInstaller start= demand | Out-Null; " +
+                    "net start TrustedInstaller | Out-Null " +
+                "}; " +
+                "sfc /scannow",
+                keepOpen: true);
+
+            // For cmd.exe fallback, use a simpler chain without PS syntax
+            if (s3.label == "Command Prompt")
+                s3 = (
+                    "cmd.exe",
+                    "/K sc query TrustedInstaller | find \"RUNNING\" >nul || " +
+                    "(sc config TrustedInstaller start= demand >nul & net start TrustedInstaller >nul) " +
+                    "&& sfc /scannow",
+                    "Command Prompt"
+                );
+
+            tools.Add(new DiskTool
+            {
+                Title = "    SFC System Scan",
+                Subtitle = "   sfc /scannow",
+                Icon = "🛡",
+                Desc = "Validates protected Windows files and restores corrupted copies from cache.",
+                Accent = C_GREEN,
+                LaunchExe = s3.exe,
+                LaunchArgs = s3.args,
+                NeedsAdmin = true,
+                ShowWindow = true
+            });
+
+            // ── 4. DISM — TrustedInstaller + CheckHealth + RestoreHealth
+            var s4cmd =
+                "sc query TrustedInstaller | find \"RUNNING\" >nul || " +
+                "(sc config TrustedInstaller start= demand >nul & net start TrustedInstaller >nul) " +
+                "&& DISM /Online /Cleanup-Image /CheckHealth " +
+                "&& DISM /Online /Cleanup-Image /RestoreHealth";
+
+            var s4ps =
+                "sc query TrustedInstaller | find `\"RUNNING`\" > $null; " +
+                "if ($LASTEXITCODE -ne 0) { " +
+                    "sc.exe config TrustedInstaller start= demand | Out-Null; " +
+                    "net start TrustedInstaller | Out-Null " +
+                "}; " +
+                "DISM /Online /Cleanup-Image /CheckHealth; " +
+                "DISM /Online /Cleanup-Image /RestoreHealth";
+
+            var s4 = ResolveShell(s4ps, keepOpen: true);
+            if (s4.label == "Command Prompt")
+                s4 = ("cmd.exe", "/K " + s4cmd, "Command Prompt");
+
+            tools.Add(new DiskTool
+            {
+                Title = "    DISM Health Restore",
+                Subtitle = "   CheckHealth → RestoreHealth",
+                Icon = "🔧",
+                Desc = "Checks then repairs the Windows component store. Run before or after SFC.",
+                Accent = C_PURPLE,
+                LaunchExe = s4.exe,
+                LaunchArgs = s4.args,
+                NeedsAdmin = true,
+                ShowWindow = true
+            });
+
+            // ── 5. Optimize Drive ─────────────────────────────────────
+            // /U = real-time progress  /V = verbose output
+            var s5 = ResolveShell("defrag C: /U /V", keepOpen: true);
+            tools.Add(new DiskTool
+            {
+                Title = "    Optimize Drive",
+                Subtitle = "   defrag C: /U /V",
+                Icon = "⚡",
+                Desc = "Runs defrag or TRIM on drive C: depending on drive type.",
+                Accent = C_TEAL,
+                LaunchExe = s5.exe,
+                LaunchArgs = s5.args,
+                NeedsAdmin = true,
+                ShowWindow = true
+            });
+
+            // ── 6. Clear Update Cache ─────────────────────────────────
+            tools.Add(new DiskTool
+            {
+                Title = "    Clear Update Cache",
+                Subtitle = "   Stop → Delete → Restart wuauserv",
+                Icon = "🔄",
+                Desc = "Stops update services, clears the download cache, then restarts them.",
+                Accent = C_ORANGE,
+                IsSpecial = true,
+                SpecialKey = "wucache"
+            });
+
+            // ── 7. Clear Event Logs ───────────────────────────────────
+            var s7 = ResolveShell(
+                "wevtutil cl System; wevtutil cl Application; wevtutil cl Security; " +
+                "Write-Host 'All event logs cleared.' -ForegroundColor Green",
+                keepOpen: true);
+            if (s7.label == "Command Prompt")
+                s7 = ("cmd.exe",
+                    "/K wevtutil cl System & wevtutil cl Application & wevtutil cl Security & echo All event logs cleared.",
+                    "Command Prompt");
+
+            tools.Add(new DiskTool
+            {
+                Title = "    Clear Event Logs",
+                Subtitle = "   wevtutil cl System / App / Security",
+                Icon = "📋",
+                Desc = "Clears Windows System, Application and Security event logs.",
+                Accent = C_RED,
+                LaunchExe = s7.exe,
+                LaunchArgs = s7.args,
+                NeedsAdmin = true,
+                ShowWindow = true
+            });
+
+            // ── 8. Compact OS ─────────────────────────────────────────
+            var s8 = ResolveShell("compact /CompactOS:always", keepOpen: true);
+            tools.Add(new DiskTool
+            {
+                Title = "    Compact OS",
+                Subtitle = "   compact /CompactOS:always",
+                Icon = "🗜",
+                Desc = "Compresses Windows OS files to save 1–3 GB on low-storage devices.",
+                Accent = C_TEAL,
+                LaunchExe = s8.exe,
+                LaunchArgs = s8.args,
+                NeedsAdmin = true,
+                ShowWindow = true
+            });
+
+            // ── 9. Control Panel ──────────────────────────────────────
+            tools.Add(new DiskTool
+            {
+                Title = "    Control Panel",
+                Subtitle = "   control.exe",
+                Icon = "🖥",
+                Desc = "Opens the Windows Control Panel for system settings and hardware.",
+                Accent = C_BLUE,
+                LaunchExe = "control.exe",
+                LaunchArgs = "",
+                NeedsAdmin = false,
+                ShowWindow = true
             });
         }
 
@@ -264,6 +410,8 @@ namespace Tech_ToolKit_Pro
                 AutoSize = true,
                 Location = new Point(20, 10)
             });
+
+            // Subtitle — shows tool count
             lblSub = new Label
             {
                 Text = string.Format("{0} tools  ·  Run individually or all at once",
@@ -274,6 +422,28 @@ namespace Tech_ToolKit_Pro
                 Location = new Point(22, 31)
             };
             topBar.Controls.Add(lblSub);
+
+            // Shell badge — shows which shell was detected
+            // Resolves against "echo test" (keepOpen:false = probe only)
+            var detected = ResolveShell("echo test", keepOpen: false);
+            Color badgeColor = detected.label == "PowerShell 7" ? C_BLUE
+                             : detected.label == "Windows PowerShell" ? C_PURPLE
+                             : C_AMBER;   // cmd.exe fallback
+
+            lblShellBadge = new Label
+            {
+                Text = string.Format("⚡ {0}", detected.label),
+                Font = new Font("Segoe UI Semibold", 7.5f),
+                ForeColor = badgeColor,
+                AutoSize = true,
+                BackColor = Color.FromArgb(20, badgeColor.R, badgeColor.G, badgeColor.B),
+                Padding = new Padding(4, 2, 4, 2),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right
+            };
+            topBar.Controls.Add(lblShellBadge);
+            topBar.Resize += (s, e) =>
+                lblShellBadge.Location = new Point(
+                    topBar.Width - lblShellBadge.Width - 16, 18);
 
             // ── Bottom bar ────────────────────────────────────────────
             bottomBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = C_SURF };
@@ -295,8 +465,7 @@ namespace Tech_ToolKit_Pro
             btnRunAll.Click += BtnRunAll_Click;
             btnClearLog.Click += (s, e) => logList.Items.Clear();
 
-            bottomBar.Controls.AddRange(new Control[]
-                { btnRunAll, btnClearLog, lblStatus });
+            bottomBar.Controls.AddRange(new Control[] { btnRunAll, btnClearLog, lblStatus });
             bottomBar.Resize += (s, e) =>
             {
                 int y = (bottomBar.Height - 34) / 2;
@@ -320,7 +489,6 @@ namespace Tech_ToolKit_Pro
             };
             mainSplit.SizeChanged += (s, e) => SafeSetSplitter();
 
-            // Tool grid in Panel1
             toolGrid = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
@@ -342,7 +510,6 @@ namespace Tech_ToolKit_Pro
             toolHost.Resize += (s, e) => RebuildToolGrid();
             mainSplit.Panel1.Controls.Add(toolHost);
 
-            // Log panel in Panel2
             BuildLogPanel();
             mainSplit.Panel2.Controls.Add(logPanel);
 
@@ -419,7 +586,7 @@ namespace Tech_ToolKit_Pro
         }
 
         // ════════════════════════════════════════════════════════════
-        //  TOOL GRID — responsive columns
+        //  RESPONSIVE TOOL GRID
         // ════════════════════════════════════════════════════════════
         void RebuildToolGrid()
         {
@@ -454,10 +621,6 @@ namespace Tech_ToolKit_Pro
 
         // ════════════════════════════════════════════════════════════
         //  TOOL CARD
-        //  ─────────────────────────────────────────────────────────
-        //  Labels use AutoSize = true — no custom Paint handlers on
-        //  labels.  This eliminates the double-render / blurry text.
-        //  For truncation on narrow cards we set MaximumSize.Width.
         // ════════════════════════════════════════════════════════════
         Panel BuildToolCard(DiskTool t, int idx)
         {
@@ -477,7 +640,6 @@ namespace Tech_ToolKit_Pro
                     e.Graphics.FillRectangle(br, 0, 0, card.Width, 3);
             };
 
-            // Icon
             var lblIcon = new Label
             {
                 Text = t.Icon,
@@ -487,9 +649,6 @@ namespace Tech_ToolKit_Pro
                 BackColor = Color.Transparent,
                 Location = new Point(10, 8)
             };
-
-            // Title — AutoSize + MaximumSize prevents overflow without
-            // double-rendering. WinForms clips to MaximumSize naturally.
             var lblTitle = new Label
             {
                 Text = t.Title,
@@ -500,9 +659,6 @@ namespace Tech_ToolKit_Pro
                 MaximumSize = new Size(300, 20),
                 Location = new Point(46, 10)
             };
-
-            // Subtitle / command — same approach, Consolas font,
-            // accent colour, rendered cleanly by WinForms
             var lblCmd = new Label
             {
                 Text = t.Subtitle,
@@ -513,8 +669,6 @@ namespace Tech_ToolKit_Pro
                 MaximumSize = new Size(300, 18),
                 Location = new Point(46, 28)
             };
-
-            // Description
             var lblDesc = new Label
             {
                 Text = t.Desc,
@@ -525,8 +679,6 @@ namespace Tech_ToolKit_Pro
                 Location = new Point(10, 50),
                 Size = new Size(card.Width - 20, 36)
             };
-
-            // Progress bar
             t.PBar = new DiskProgressBar(t.Accent)
             {
                 Location = new Point(10, 94),
@@ -534,8 +686,6 @@ namespace Tech_ToolKit_Pro
                 Value = 0,
                 Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top
             };
-
-            // Status label
             t.StatusL = new Label
             {
                 Text = "Ready",
@@ -545,8 +695,6 @@ namespace Tech_ToolKit_Pro
                 BackColor = Color.Transparent,
                 Location = new Point(10, 110)
             };
-
-            // Run button
             t.BtnRun = MakeSmallBtn("▶  Run", t.Accent);
             t.BtnRun.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             t.BtnRun.Click += (s, e) => RunTool(idx, null);
@@ -572,12 +720,6 @@ namespace Tech_ToolKit_Pro
 
         // ════════════════════════════════════════════════════════════
         //  RUN TOOL
-        //  ─────────────────────────────────────────────────────────
-        //  Admin tools: LaunchExe = "cmd.exe", LaunchArgs = "/C ..."
-        //    UseShellExecute = true, Verb = "runas"
-        //    → cmd.exe launches elevated, resolves System32 correctly.
-        //
-        //  Non-admin tools: direct exe, UseShellExecute = false/true.
         // ════════════════════════════════════════════════════════════
         void RunTool(int idx, Action onComplete)
         {
@@ -594,7 +736,9 @@ namespace Tech_ToolKit_Pro
             AddLog(t.Title, "Started",
                 t.IsSpecial
                     ? t.Subtitle
-                    : t.LaunchExe + " " + t.LaunchArgs);
+                    : string.Format("[{0}]  {1}",
+                        t.LaunchExe.Replace(".exe", "").ToUpper(),
+                        t.Subtitle));
             runningCount++;
 
             if (t.IsSpecial && t.SpecialKey == "wucache")
@@ -607,7 +751,6 @@ namespace Tech_ToolKit_Pro
             {
                 FileName = t.LaunchExe,
                 Arguments = t.LaunchArgs,
-                // UseShellExecute must be true for "runas" to work
                 UseShellExecute = true,
                 Verb = t.NeedsAdmin ? "runas" : "",
                 WindowStyle = t.ShowWindow
@@ -675,8 +818,7 @@ namespace Tech_ToolKit_Pro
 
                     UpdateToolStatus(idx, "Step 3/4 — Deleting cache...", 50);
                     AddLog(t.Title, "Step 3",
-                        @"Deleting C:\Windows\SoftwareDistribution\Download");
-
+                        @"C:\Windows\SoftwareDistribution\Download");
                     string cp = @"C:\Windows\SoftwareDistribution\Download";
                     if (Directory.Exists(cp))
                     {
@@ -705,7 +847,6 @@ namespace Tech_ToolKit_Pro
             });
         }
 
-        // Runs a command via cmd.exe silently, no elevation (for net stop/start)
         void RunCmdSilent(string command)
         {
             try
@@ -737,24 +878,11 @@ namespace Tech_ToolKit_Pro
             tools[idx].PBar.Value = pct;
         }
 
-        // ════════════════════════════════════════════════════════════
-        //  TOOL FINISHED
-        //  ─────────────────────────────────────────────────────────
-        //  Acceptable exit codes:
-        //   0    = success (most tools)
-        //   3010 = success, reboot required (DISM, some installers)
-        //   1    = some cmd.exe wrappers return 1 on success
-        //
-        //  cmd.exe wrapping: When we do  cmd.exe /C sfc /scannow,
-        //  cmd's exit code IS the inner tool's exit code, so 0 = ok.
-        // ════════════════════════════════════════════════════════════
         void ToolFinished(int idx, int exitCode, Action onComplete)
         {
             var t = tools[idx];
             t.PBar.Animate = false;
-
             bool ok = (exitCode == 0 || exitCode == 3010);
-
             t.PBar.Value = 100;
             t.PBar.SetColor(ok ? C_GREEN : C_RED);
             t.StatusL.Text = ok
@@ -765,9 +893,7 @@ namespace Tech_ToolKit_Pro
 
             AddLog(t.Title,
                 ok ? "Success" : "Failed",
-                t.IsSpecial
-                    ? t.Subtitle
-                    : t.LaunchExe + " " + t.LaunchArgs,
+                t.IsSpecial ? t.Subtitle : t.Subtitle,
                 ok ? C_GREEN : C_RED);
 
             runningCount--;
@@ -783,11 +909,13 @@ namespace Tech_ToolKit_Pro
         // ════════════════════════════════════════════════════════════
         void BtnRunAll_Click(object sender, EventArgs e)
         {
+            var detected = ResolveShell("echo test", false);
             if (MessageBox.Show(
                 string.Format(
                     "Run all {0} disk maintenance tools sequentially?\n\n" +
-                    "Administrator rights required for most tools.\nContinue?",
-                    tools.Count),
+                    "Shell: {1}\n" +
+                    "Admin rights required for most tools.\nContinue?",
+                    tools.Count, detected.label),
                 "Run All Maintenance Tools",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question) != DialogResult.Yes) return;
@@ -818,7 +946,6 @@ namespace Tech_ToolKit_Pro
         {
             if (InvokeRequired)
             { Invoke(new Action(() => AddLog(tool, status, note, fg))); return; }
-
             var item = new ListViewItem(DateTime.Now.ToString("HH:mm:ss"));
             item.SubItems.Add(tool);
             item.SubItems.Add(status);
@@ -888,7 +1015,7 @@ namespace Tech_ToolKit_Pro
         }
 
         // ════════════════════════════════════════════════════════════
-        //  OWNER DRAW — log list only (cards use normal label drawing)
+        //  OWNER DRAW
         // ════════════════════════════════════════════════════════════
         void DrawHeader(object sender, DrawListViewColumnHeaderEventArgs e)
         {
@@ -967,7 +1094,6 @@ namespace Tech_ToolKit_Pro
                    | ControlStyles.SupportsTransparentBackColor, true);
             BackColor = Color.Transparent;
             Height = 8;
-
             _pulseTimer = new System.Windows.Forms.Timer { Interval = 30 };
             _pulseTimer.Tick += (s, e) =>
             {
@@ -984,10 +1110,8 @@ namespace Tech_ToolKit_Pro
         {
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-
             using (var br = new SolidBrush(Color.FromArgb(38, 46, 56)))
                 g.FillRectangle(br, 0, 0, Width, Height);
-
             if (_animate)
             {
                 int pw = Math.Max(Width / 3, 40);
@@ -1007,10 +1131,7 @@ namespace Tech_ToolKit_Pro
                         rect, Color.Transparent,
                         Color.FromArgb(160, _accent.R, _accent.G, _accent.B),
                         LinearGradientMode.Horizontal))
-                    {
-                        br.InterpolationColors = blend;
-                        g.FillRectangle(br, rect);
-                    }
+                    { br.InterpolationColors = blend; g.FillRectangle(br, rect); }
                 }
             }
             else
