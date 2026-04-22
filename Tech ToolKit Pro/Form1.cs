@@ -167,7 +167,7 @@ namespace Tech_ToolKit_Pro
         }
 
         private bool isCustomMaximized = false;
-        private Size normalSize = new Size(1062, 611);
+        private Size normalSize = new Size(1072, 616);
 
         private void button11_Click(object sender, EventArgs e)
         {
@@ -178,8 +178,8 @@ namespace Tech_ToolKit_Pro
 
                 // Resize to 85% of screen (clean modern look)
                 this.Size = new Size(
-                    (int)(screen.Width * 0.70),
-                    (int)(screen.Height * 0.75)
+                    (int)(screen.Width * 0.85),
+                    (int)(screen.Height * 0.85)
                 );
 
                 // Center the form
