@@ -393,13 +393,13 @@ namespace Tech_ToolKit_Pro
                             | AnchorStyles.Left | AnchorStyles.Right;
 
             fileList.Columns.Add("", 22);
-            fileList.Columns.Add("File Name", 230);
-            fileList.Columns.Add("Type", 110);
+            fileList.Columns.Add("File Name", 280);
+            fileList.Columns.Add("Type", 160);
             fileList.Columns.Add("Original Path", 220);
-            fileList.Columns.Add("Size", 124);
-            fileList.Columns.Add("Deleted On", 158);
-            fileList.Columns.Add("Source", 152);
-            fileList.Columns.Add("Recoverability", 110);
+            fileList.Columns.Add("Size", 174);
+            fileList.Columns.Add("Deleted On", 208);
+            fileList.Columns.Add("Source", 172);
+            fileList.Columns.Add("Recoverability", 121);
 
             fileList.DrawColumnHeader += DrawFileHeader;
             fileList.DrawItem += (s, e) => { };
@@ -450,10 +450,10 @@ namespace Tech_ToolKit_Pro
             logList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom
                            | AnchorStyles.Left | AnchorStyles.Right;
 
-            logList.Columns.Add("Time", 115);
-            logList.Columns.Add("File", 450);
-            logList.Columns.Add("Action", 201);
-            logList.Columns.Add("Result", 360);
+            logList.Columns.Add("Time", 165);
+            logList.Columns.Add("File", 470);
+            logList.Columns.Add("Action", 352);
+            logList.Columns.Add("Result", 370);
 
             logList.DrawColumnHeader += DrawLogHeader;
             logList.DrawItem += (s2, e2) => { };

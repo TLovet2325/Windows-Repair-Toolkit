@@ -327,11 +327,11 @@ namespace Tech_ToolKit_Pro
             logList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom
                            | AnchorStyles.Left | AnchorStyles.Right;
 
-            logList.Columns.Add("Status", 80);
-            logList.Columns.Add("Folder", 260);
-            logList.Columns.Add("File", 310);
-            logList.Columns.Add("Size", 110);
-            logList.Columns.Add("Path", 366);
+            logList.Columns.Add("Status", 120);
+            logList.Columns.Add("Folder", 360);
+            logList.Columns.Add("File", 300);
+            logList.Columns.Add("Size", 210);
+            logList.Columns.Add("Path", 367);
 
             logList.DrawColumnHeader += DrawHeader;
             logList.DrawItem += (s, e) => { };

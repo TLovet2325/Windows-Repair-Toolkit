@@ -206,11 +206,11 @@ namespace Tech_ToolKit_Pro
 
             // Columns
             procView.Columns.Add("Process", 275);
-            procView.Columns.Add("PID", 175);
-            procView.Columns.Add("CPU %", 180);
-            procView.Columns.Add("RAM (MB)", 187);
+            procView.Columns.Add("PID", 205);
+            procView.Columns.Add("CPU %", 230);
+            procView.Columns.Add("RAM (MB)", 238);
             procView.Columns.Add("Threads", 180);
-            procView.Columns.Add("Status", 112);
+            procView.Columns.Add("Status", 212);
 
             procView.DrawColumnHeader += DrawHeader;
             procView.DrawItem += (s, e) => { };

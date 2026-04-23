@@ -300,11 +300,11 @@ namespace Tech_ToolKit_Pro
 
             updateList.Columns.Add("", 24);   // severity dot
             updateList.Columns.Add("Update Title", 320);
-            updateList.Columns.Add("Category", 230);
+            updateList.Columns.Add("Category", 290);
             updateList.Columns.Add("KB Article", 150);
-            updateList.Columns.Add("Size", 140);
-            updateList.Columns.Add("Severity", 140);
-            updateList.Columns.Add("Status", 122);
+            updateList.Columns.Add("Size", 190);
+            updateList.Columns.Add("Severity", 190);
+            updateList.Columns.Add("Status", 193);
 
             updateList.DrawColumnHeader += DrawUpdateHeader;
             updateList.DrawItem += (s, e) => { };
@@ -354,10 +354,10 @@ namespace Tech_ToolKit_Pro
             logList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom
                            | AnchorStyles.Left | AnchorStyles.Right;
 
-            logList.Columns.Add("Time", 166);
+            logList.Columns.Add("Time", 197);
             logList.Columns.Add("Update", 490);
-            logList.Columns.Add("Action", 250);
-            logList.Columns.Add("Result", 220);
+            logList.Columns.Add("Action", 350);
+            logList.Columns.Add("Result", 320);
 
             logList.DrawColumnHeader += DrawLogHeader;
             logList.DrawItem += (s2, e2) => { };

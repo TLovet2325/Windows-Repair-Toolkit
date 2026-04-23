@@ -322,9 +322,9 @@ namespace Tech_ToolKit_Pro
                               | AnchorStyles.Left | AnchorStyles.Right;
 
             sourceList.Columns.Add("", 22);
-            sourceList.Columns.Add("Path", 580);
-            sourceList.Columns.Add("Type", 280);
-            sourceList.Columns.Add("Size", 244);
+            sourceList.Columns.Add("Path", 610);
+            sourceList.Columns.Add("Type", 380);
+            sourceList.Columns.Add("Size", 345);
 
             sourceList.DrawColumnHeader += DrawSourceHeader;
             sourceList.DrawItem += (s, e) => { };
@@ -506,9 +506,9 @@ namespace Tech_ToolKit_Pro
             logList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom
                            | AnchorStyles.Left | AnchorStyles.Right;
 
-            logList.Columns.Add("Time", 170);
-            logList.Columns.Add("Event", 250);
-            logList.Columns.Add("Detail", 698);
+            logList.Columns.Add("Time", 200);
+            logList.Columns.Add("Event", 350);
+            logList.Columns.Add("Detail", 799);
 
             logList.DrawColumnHeader += DrawLogHeader;
             logList.DrawItem += (s, e) => { };
@@ -559,13 +559,13 @@ namespace Tech_ToolKit_Pro
             historyList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom
                                | AnchorStyles.Left | AnchorStyles.Right;
 
-            historyList.Columns.Add("Date / Time", 80);
-            historyList.Columns.Add("Archive Name", 314);
-            historyList.Columns.Add("Format", 80);
-            historyList.Columns.Add("Size", 100);
-            historyList.Columns.Add("Files", 95);
-            historyList.Columns.Add("Duration", 105);
-            historyList.Columns.Add("Status", 114);
+            historyList.Columns.Add("Date / Time", 110);
+            historyList.Columns.Add("Archive Name", 444);
+            historyList.Columns.Add("Format", 140);
+            historyList.Columns.Add("Size", 170);
+            historyList.Columns.Add("Files", 205);
+            historyList.Columns.Add("Duration", 125);
+            historyList.Columns.Add("Status", 155);
 
             historyList.DrawColumnHeader += DrawLogHeader;
             historyList.DrawItem += (s, e) => { };
